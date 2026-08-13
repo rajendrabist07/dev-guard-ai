@@ -3,8 +3,37 @@ import Navbar from '@/components/Navbar';
 import { ShieldCheck, Cpu, ArrowRight, Zap, Code2, Layers } from 'lucide-react';
 
 export default function Home() {
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
+    name: 'DevGuard AI',
+    applicationCategory: 'DeveloperApplication',
+    operatingSystem: 'Web',
+    url: 'https://dev-guard-ai.vercel.app',
+    description:
+      'An autonomous pull request review and security agent that runs linters, dependency vulnerability scans, and tests before producing structured review findings.',
+    offers: {
+      '@type': 'Offer',
+      price: '0',
+      priceCurrency: 'USD',
+    },
+    featureList: [
+      'GitHub pull request webhook reviews',
+      'Webhook signature verification',
+      'Tool-backed lint, dependency, and test checks',
+      'Structured severity-tagged findings',
+      'Supabase-backed review history dashboard',
+    ],
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-[#0b0f19] text-gray-100 selection:bg-emerald-500/30 selection:text-emerald-300">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c'),
+        }}
+      />
       <Navbar />
 
       {/* Hero Section */}
