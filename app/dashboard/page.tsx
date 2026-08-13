@@ -4,8 +4,7 @@ import { useEffect, useState, use } from 'react';
 import Navbar from '@/components/Navbar';
 import ReviewDetailModal from '@/components/ReviewDetailModal';
 import SimulateReviewModal from '@/components/SimulateReviewModal';
-import { DisplayReviewRun, Finding, Repo } from '@/lib/db/types';
-import { getRepos, getReviewRunById, getReviewRuns } from '@/lib/db/supabase';
+import { DashboardData, DisplayReviewRun, Finding } from '@/lib/db/types';
 import {
   ShieldAlert,
   GitPullRequest,
@@ -22,9 +21,17 @@ import {
 
 export default function DashboardPage({ searchParams }: { searchParams: Promise<{ simulate?: string }> }) {
   const resolvedSearchParams = use(searchParams);
-  const [repos, setRepos] = useState<Repo[]>([]);
-  const [reviewRuns, setReviewRuns] = useState<DisplayReviewRun[]>([]);
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
+  const repos = dashboardData?.repos ?? [];
+  const reviewRuns = dashboardData?.reviewRuns ?? [];
+  const stats = dashboardData?.stats ?? {
+    connectedRepos: 0,
+    reviewRuns: 0,
+    toolsExecuted: 0,
+    securityFindings: 0,
+  };
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Selected run for detail view
   const [selectedRun, setSelectedRun] = useState<DisplayReviewRun | null>(null);
@@ -38,12 +45,17 @@ export default function DashboardPage({ searchParams }: { searchParams: Promise<
 
   const loadData = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
-      const [reposData, runsData] = await Promise.all([getRepos(), getReviewRuns()]);
-      setRepos(reposData);
-      setReviewRuns(runsData);
+      const res = await fetch('/api/dashboard', { cache: 'no-store' });
+      const data = (await res.json()) as DashboardData | { error: string };
+      if (!res.ok) {
+        throw new Error('error' in data ? data.error : 'Dashboard data could not be loaded.');
+      }
+      setDashboardData(data as DashboardData);
     } catch (err) {
       console.error('Error loading dashboard data:', err);
+      setLoadError(err instanceof Error ? err.message : 'Dashboard data could not be loaded.');
     } finally {
       setLoading(false);
     }
@@ -57,14 +69,17 @@ export default function DashboardPage({ searchParams }: { searchParams: Promise<
   }, [resolvedSearchParams]);
 
   const handleOpenRunDetail = async (run: DisplayReviewRun) => {
-    const { findings } = await getReviewRunById(run.id);
+    const res = await fetch(`/api/reviews/${run.id}`, { cache: 'no-store' });
+    const data = (await res.json()) as { run?: DisplayReviewRun; findings?: Finding[]; error?: string };
+    const findings = data.findings ?? [];
     setSelectedRun(run);
     setSelectedFindings(findings);
   };
 
   const handleSimulationFinished = async (newRunId: string) => {
     await loadData();
-    const { run, findings } = await getReviewRunById(newRunId);
+    const res = await fetch(`/api/reviews/${newRunId}`, { cache: 'no-store' });
+    const { run, findings } = (await res.json()) as { run: DisplayReviewRun | null; findings: Finding[] };
     if (run) {
       setSelectedRun(run);
       setSelectedFindings(findings);
@@ -118,7 +133,7 @@ export default function DashboardPage({ searchParams }: { searchParams: Promise<
               <span>Connected Repositories</span>
               <Github className="w-4 h-4 text-emerald-400" />
             </div>
-            <div className="text-2xl font-extrabold text-white">{repos.length}</div>
+            <div className="text-2xl font-extrabold text-white">{loading ? '-' : stats.connectedRepos}</div>
             <div className="text-[11px] text-emerald-400 font-mono flex items-center gap-1">
               <CheckCircle2 className="w-3 h-3" /> Active Webhook Subscriptions
             </div>
@@ -129,8 +144,8 @@ export default function DashboardPage({ searchParams }: { searchParams: Promise<
               <span>PR Review Runs</span>
               <GitPullRequest className="w-4 h-4 text-teal-400" />
             </div>
-            <div className="text-2xl font-extrabold text-white">{reviewRuns.length}</div>
-            <div className="text-[11px] text-teal-400 font-mono">100% Verified via Tool Output</div>
+            <div className="text-2xl font-extrabold text-white">{loading ? '-' : stats.reviewRuns}</div>
+            <div className="text-[11px] text-teal-400 font-mono">Loaded from review_runs</div>
           </div>
 
           <div className="p-5 rounded-2xl bg-gray-900/50 border border-gray-800/80 space-y-2">
@@ -139,9 +154,9 @@ export default function DashboardPage({ searchParams }: { searchParams: Promise<
               <Cpu className="w-4 h-4 text-cyan-400" />
             </div>
             <div className="text-2xl font-extrabold text-white">
-              {reviewRuns.reduce((acc, r) => acc + (r.tool_calls_count || 1), 0)}
+              {loading ? '-' : stats.toolsExecuted}
             </div>
-            <div className="text-[11px] text-cyan-400 font-mono">AST, OSV.dev, Test Runners</div>
+            <div className="text-[11px] text-cyan-400 font-mono">Summed from tool_calls_count</div>
           </div>
 
           <div className="p-5 rounded-2xl bg-gray-900/50 border border-gray-800/80 space-y-2">
@@ -149,27 +164,47 @@ export default function DashboardPage({ searchParams }: { searchParams: Promise<
               <span>Security Findings</span>
               <ShieldAlert className="w-4 h-4 text-rose-400" />
             </div>
-            <div className="text-2xl font-extrabold text-white">3</div>
-            <div className="text-[11px] text-rose-400 font-mono">Critical & Warning Annotations</div>
+            <div className="text-2xl font-extrabold text-white">{loading ? '-' : stats.securityFindings}</div>
+            <div className="text-[11px] text-rose-400 font-mono">Counted from findings</div>
           </div>
         </div>
+
+        {loadError && (
+          <div className="rounded-xl border border-rose-500/30 bg-rose-950/30 px-4 py-3 text-sm text-rose-200">
+            {loadError}
+          </div>
+        )}
 
         {/* Repositories Section */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-white tracking-tight">Monitored Repositories</h2>
             <a
-              href="https://github.com/apps"
+              href={dashboardData?.installUrl ?? '#'}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs font-semibold text-emerald-400 hover:text-emerald-300 flex items-center space-x-1"
+              aria-disabled={!dashboardData?.installUrl}
+              className={`text-xs font-semibold flex items-center space-x-1 ${
+                dashboardData?.installUrl
+                  ? 'text-emerald-400 hover:text-emerald-300'
+                  : 'text-gray-600 pointer-events-none'
+              }`}
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>Install GitHub App on New Repo</span>
+              <span>{dashboardData?.installUrl ? 'Install GitHub App on New Repo' : 'GitHub App not configured'}</span>
             </a>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {loading ? (
+            <div className="rounded-2xl bg-gray-900/60 border border-gray-800/80 p-8 text-center text-sm text-gray-400">
+              Loading repositories...
+            </div>
+          ) : repos.length === 0 ? (
+            <div className="rounded-2xl bg-gray-900/60 border border-gray-800/80 p-8 text-center text-sm text-gray-400">
+              No repositories connected yet. Create and install the GitHub App to start real PR reviews.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {repos.map((repo) => (
               <div
                 key={repo.id}
@@ -192,7 +227,8 @@ export default function DashboardPage({ searchParams }: { searchParams: Promise<
                 </span>
               </div>
             ))}
-          </div>
+            </div>
+          )}
         </div>
 
         {/* Review Runs History Table */}
@@ -216,8 +252,12 @@ export default function DashboardPage({ searchParams }: { searchParams: Promise<
           </div>
 
           <div className="bg-gray-900/60 border border-gray-800 rounded-2xl overflow-hidden">
-            {filteredRuns.length === 0 ? (
-              <div className="text-center py-12 text-gray-500 text-xs font-mono">No review runs found.</div>
+            {loading ? (
+              <div className="text-center py-12 text-gray-500 text-xs font-mono">Loading review runs...</div>
+            ) : filteredRuns.length === 0 ? (
+              <div className="text-center py-12 text-gray-500 text-xs font-mono">
+                No reviews yet. Install the GitHub App or run a clearly marked simulation to get started.
+              </div>
             ) : (
               <div className="divide-y divide-gray-800/80">
                 {filteredRuns.map((run) => (
@@ -243,7 +283,13 @@ export default function DashboardPage({ searchParams }: { searchParams: Promise<
                           <span>•</span>
                           <span>Commit: {run.commit_sha.substring(0, 7)}</span>
                           <span>•</span>
-                          <span className="text-cyan-400">{run.tool_calls_count || 3} Tool Iterations</span>
+                          <span className="text-cyan-400">{run.tool_calls_count} Tool Iterations</span>
+                          {run.is_simulation && (
+                            <>
+                              <span>•</span>
+                              <span className="text-amber-300">Simulated Run</span>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -251,7 +297,7 @@ export default function DashboardPage({ searchParams }: { searchParams: Promise<
                     <div className="flex items-center space-x-4">
                       <span className="hidden sm:inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
                         <CheckCircle2 className="w-3 h-3 mr-1" />
-                        Completed
+                        {run.status}
                       </span>
                       <ChevronRight className="w-5 h-5 text-gray-500 group-hover:text-white transition-colors" />
                     </div>

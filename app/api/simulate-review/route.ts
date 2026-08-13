@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createReviewRun, saveFindings } from '@/lib/db/supabase';
+import { createReviewRun, ensureRepoForInstallation, saveFindings, updateReviewRun } from '@/lib/db/supabase';
 import { runAgentOrchestrator } from '@/lib/agent/orchestrator';
 
 export async function POST(req: NextRequest) {
@@ -27,13 +27,21 @@ export async function POST(req: NextRequest) {
 
     const targetFiles = fileNames && fileNames.length > 0 ? fileNames : ['app/api/checkout/route.ts', 'package.json'];
 
+    const repo = await ensureRepoForInstallation({
+      githubInstallationId: 'simulation',
+      accountLogin: 'devguard-ai',
+      fullName: 'devguard-ai/simulated-review',
+    });
+
     // 1. Create a review run in DB
     const run = await createReviewRun({
+      repo_id: repo.id,
       pr_number: Math.floor(Math.random() * 90) + 10,
       pr_title: prTitle || 'feat: payment checkout endpoint refactor & dependency update',
       pr_author: prAuthor || 'dev-guard-user',
       commit_sha: Math.random().toString(36).substring(2, 10),
       status: 'running',
+      is_simulation: true,
     });
 
     // 2. Run agent orchestrator loop
@@ -41,6 +49,13 @@ export async function POST(req: NextRequest) {
 
     // 3. Save findings to DB
     const savedFindings = await saveFindings(result.findings);
+    await updateReviewRun(run.id, {
+      status: 'completed',
+      tool_calls_count: result.toolCallsCount,
+      agent_trace: result.trace,
+      completed_at: new Date().toISOString(),
+      error_message: null,
+    });
 
     // 4. Return complete result
     return NextResponse.json({

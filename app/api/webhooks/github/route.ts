@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchPullRequestDiff, getOctokitClient, postGitHubReviewComment, verifyGitHubWebhook } from '@/lib/github/client';
-import { createReviewRun, ensureRepoForInstallation, saveFindings } from '@/lib/db/supabase';
+import { createReviewRun, ensureRepoForInstallation, saveFindings, updateReviewRun } from '@/lib/db/supabase';
 import { runAgentOrchestrator } from '@/lib/agent/orchestrator';
 
 export async function POST(req: NextRequest) {
@@ -46,7 +46,11 @@ export async function POST(req: NextRequest) {
         const commitSha = pr.head.sha;
         const prTitle = pr.title || '';
         const prAuthor = pr.user?.login || 'unknown';
-        const githubInstallationId = String(payload.installation?.id ?? 'local-dev');
+        const installationId = payload.installation?.id;
+        if (!installationId) {
+          return NextResponse.json({ message: 'Missing GitHub installation id' }, { status: 200 });
+        }
+        const githubInstallationId = String(installationId);
 
         const storedRepo = await ensureRepoForInstallation({
           githubInstallationId,
@@ -65,36 +69,51 @@ export async function POST(req: NextRequest) {
         });
 
         // 3. Fetch PR diff via Octokit
-        const octokit = getOctokitClient();
+        const octokit = await getOctokitClient(installationId);
         const [owner = '', repoName = ''] = repoFullName.split('/');
         if (!owner || !repoName) {
           return NextResponse.json({ message: 'Malformed repository name ignored' }, { status: 200 });
         }
         const { diff, files } = await fetchPullRequestDiff(octokit, owner, repoName, prNumber);
 
-        // 4. Run Agentic Orchestrator
-        const result = await runAgentOrchestrator(diff, files, reviewRun.id);
+        try {
+          // 4. Run Agentic Orchestrator
+          const result = await runAgentOrchestrator(diff, files, reviewRun.id);
 
-        // 5. Post review comment to GitHub PR
-        await postGitHubReviewComment(
-          octokit,
-          owner,
-          repoName,
-          prNumber,
-          commitSha,
-          result.findings,
-          result.summary
-        );
+          // 5. Post review comment to GitHub PR
+          await postGitHubReviewComment(
+            octokit,
+            owner,
+            repoName,
+            prNumber,
+            commitSha,
+            result.findings,
+            result.summary
+          );
 
-        // 6. Save findings to DB
-        await saveFindings(result.findings);
+          // 6. Save findings to DB
+          await saveFindings(result.findings);
+          await updateReviewRun(reviewRun.id, {
+            status: 'completed',
+            tool_calls_count: result.toolCallsCount,
+            agent_trace: result.trace,
+            completed_at: new Date().toISOString(),
+            error_message: null,
+          });
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : 'Review processing failed.';
+          await updateReviewRun(reviewRun.id, {
+            status: 'failed',
+            completed_at: new Date().toISOString(),
+            error_message: message,
+          });
+          console.error('GitHub review processing failed:', err);
+        }
 
         return NextResponse.json({
           success: true,
           reviewRunId: reviewRun.id,
-          status: 'completed',
-          findingsCount: result.findings.length,
-          toolCallsCount: result.toolCallsCount,
+          status: 'accepted',
         });
       }
     }

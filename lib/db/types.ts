@@ -24,6 +24,13 @@ export interface ReviewRun {
   status: ReviewStatus;
   started_at: string | null;
   completed_at: string | null;
+  pr_title: string | null;
+  pr_author: string | null;
+  tool_calls_count: number;
+  agent_trace: AgentTraceStep[];
+  error_message: string | null;
+  is_simulation: boolean;
+  created_at: string;
 }
 
 export interface Finding {
@@ -45,17 +52,40 @@ export interface AgentTraceStep {
   timestamp: string;
 }
 
-export interface DisplayReviewRun extends ReviewRun {
-  pr_title?: string;
-  pr_author?: string;
-  tool_calls_count?: number;
-  agent_trace?: AgentTraceStep[];
-  error_message?: string;
-  created_at?: string;
-}
+export type DisplayReviewRun = ReviewRun;
 
 export type NewReviewRun = Pick<ReviewRun, 'repo_id' | 'pr_number' | 'commit_sha' | 'status'> &
-  Partial<Pick<ReviewRun, 'started_at' | 'completed_at'>> &
-  Partial<Pick<DisplayReviewRun, 'pr_title' | 'pr_author'>>;
+  Partial<
+    Pick<
+      ReviewRun,
+      | 'started_at'
+      | 'completed_at'
+      | 'pr_title'
+      | 'pr_author'
+      | 'tool_calls_count'
+      | 'agent_trace'
+      | 'error_message'
+      | 'is_simulation'
+    >
+  >;
 
 export type NewFinding = Omit<Finding, 'id'>;
+
+export interface DashboardStats {
+  connectedRepos: number;
+  reviewRuns: number;
+  toolsExecuted: number;
+  securityFindings: number;
+}
+
+export interface DashboardData {
+  repos: Repo[];
+  reviewRuns: DisplayReviewRun[];
+  findingsCountByRunId: Record<string, number>;
+  stats: DashboardStats;
+  installUrl: string | null;
+  config: {
+    hasSupabase: boolean;
+    hasGitHubAppInstallUrl: boolean;
+  };
+}

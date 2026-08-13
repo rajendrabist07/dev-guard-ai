@@ -1,4 +1,5 @@
 import { Octokit } from '@octokit/rest';
+import { createAppAuth } from '@octokit/auth-app';
 import { verify } from '@octokit/webhooks-methods';
 import { NewFinding } from '../db/types';
 
@@ -6,8 +7,8 @@ const webhookSecret = process.env.GITHUB_WEBHOOK_SECRET || '';
 
 export async function verifyGitHubWebhook(body: string, signature: string): Promise<boolean> {
   if (!webhookSecret) {
-    console.warn('GITHUB_WEBHOOK_SECRET is not set; allowing request in development mode.');
-    return true;
+    console.error('GITHUB_WEBHOOK_SECRET is not set; rejecting webhook request.');
+    return false;
   }
   try {
     return await verify(webhookSecret, body, signature);
@@ -17,8 +18,25 @@ export async function verifyGitHubWebhook(body: string, signature: string): Prom
   }
 }
 
-export function getOctokitClient(installationToken?: string): Octokit {
-  const token = installationToken || process.env.GITHUB_TOKEN || process.env.GITHUB_PERSONAL_ACCESS_TOKEN;
+function getGitHubPrivateKey(): string {
+  return (process.env.GITHUB_APP_PRIVATE_KEY || process.env.GITHUB_PRIVATE_KEY || '').replace(/\\n/g, '\n');
+}
+
+export async function getOctokitClient(installationId?: number): Promise<Octokit> {
+  const appId = process.env.GITHUB_APP_ID;
+  const privateKey = getGitHubPrivateKey();
+
+  if (installationId && appId && privateKey) {
+    const auth = createAppAuth({
+      appId,
+      privateKey,
+      installationId,
+    });
+    const installationAuthentication = await auth({ type: 'installation' });
+    return new Octokit({ auth: installationAuthentication.token });
+  }
+
+  const token = process.env.GITHUB_TOKEN || process.env.GITHUB_PERSONAL_ACCESS_TOKEN;
   return new Octokit({ auth: token });
 }
 
@@ -41,27 +59,9 @@ export async function fetchPullRequestDiff(
       .join('\n\n');
 
     return { diff: diffContent, files: fileNames };
-  } catch {
-    console.warn(`Could not fetch live diff for ${owner}/${repo}#${pullNumber}. Returning mock diff for evaluation.`);
-    return {
-      files: ['app/api/checkout/route.ts', 'package.json'],
-      diff: `--- a/app/api/checkout/route.ts
-+++ b/app/api/checkout/route.ts
-@@ -30,6 +30,12 @@ export async function POST(req: Request) {
-+  const { userId, amount } = await req.json();
-+  // UNSAFE QUERY
-+  const query = "SELECT * FROM users WHERE id = '" + userId + "'";
-+  const result = await db.raw(query);
-+  
-+  // Missing error handling
-+  await fetch('https://payment-provider.internal/charge', { method: 'POST' });
-
---- a/package.json
-+++ b/package.json
-@@ -15,4 +15,5 @@
-+    "axios": "0.19.0",
-+    "lodash": "4.17.15"`,
-    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown GitHub API error';
+    throw new Error(`Could not fetch live diff for ${owner}/${repo}#${pullNumber}: ${message}`);
   }
 }
 

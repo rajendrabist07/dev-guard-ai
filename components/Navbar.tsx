@@ -4,6 +4,12 @@ import Link from 'next/link';
 import { ShieldAlert, Github, LayoutDashboard, Cpu } from 'lucide-react';
 
 export default function Navbar() {
+  const githubAppInstallUrl =
+    process.env.NEXT_PUBLIC_GITHUB_APP_INSTALL_URL ||
+    (process.env.NEXT_PUBLIC_GITHUB_APP_SLUG
+      ? `https://github.com/apps/${process.env.NEXT_PUBLIC_GITHUB_APP_SLUG}/installations/new`
+      : null);
+
   return (
     <header className="sticky top-0 z-40 w-full border-b border-gray-800/80 bg-[#0b0f19]/80 backdrop-blur-md">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
@@ -29,15 +35,25 @@ export default function Navbar() {
             <LayoutDashboard className="w-4 h-4" />
             <span>Dashboard</span>
           </Link>
-          <a
-            href="https://github.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center space-x-2 text-sm font-medium text-gray-400 hover:text-white transition-colors"
-          >
-            <Github className="w-4 h-4" />
-            <span className="hidden sm:inline">GitHub App</span>
-          </a>
+          {githubAppInstallUrl ? (
+            <a
+              href={githubAppInstallUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center space-x-2 text-sm font-medium text-gray-400 hover:text-white transition-colors"
+            >
+              <Github className="w-4 h-4" />
+              <span className="hidden sm:inline">Install App</span>
+            </a>
+          ) : (
+            <span
+              title="Set NEXT_PUBLIC_GITHUB_APP_SLUG or NEXT_PUBLIC_GITHUB_APP_INSTALL_URL after creating the GitHub App."
+              className="hidden sm:flex items-center space-x-2 text-sm font-medium text-gray-600 cursor-not-allowed"
+            >
+              <Github className="w-4 h-4" />
+              <span>GitHub App not configured</span>
+            </span>
+          )}
           <Link
             href="/dashboard?simulate=true"
             className="flex items-center space-x-2 text-xs font-semibold px-3.5 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20 transition-all shadow-sm shadow-emerald-950"

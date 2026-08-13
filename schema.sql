@@ -22,10 +22,17 @@ create table if not exists review_runs (
   id uuid primary key default gen_random_uuid(),
   repo_id uuid not null references repos(id) on delete cascade,
   pr_number int not null,
+  pr_title text,
+  pr_author text,
   commit_sha text not null,
   status text not null check (status in ('pending', 'running', 'completed', 'failed')),
+  tool_calls_count int not null default 0,
+  agent_trace jsonb not null default '[]'::jsonb,
+  error_message text,
+  is_simulation boolean not null default false,
   started_at timestamptz,
-  completed_at timestamptz
+  completed_at timestamptz,
+  created_at timestamptz not null default now()
 );
 
 create table if not exists findings (
@@ -36,7 +43,8 @@ create table if not exists findings (
   line int not null,
   message text not null,
   suggested_fix text,
-  tool_source text
+  tool_source text,
+  created_at timestamptz not null default now()
 );
 
 create index if not exists idx_repos_installation_id on repos(installation_id);

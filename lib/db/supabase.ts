@@ -1,164 +1,125 @@
 import { createClient } from '@supabase/supabase-js';
-import { DisplayReviewRun, Finding, NewFinding, NewReviewRun, Repo } from './types';
+import {
+  AgentTraceStep,
+  DashboardData,
+  DisplayReviewRun,
+  Finding,
+  NewFinding,
+  NewReviewRun,
+  Repo,
+  ReviewStatus,
+} from './types';
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
-export const supabase = supabaseUrl && supabaseAnonKey
-  ? createClient(supabaseUrl, supabaseAnonKey)
-  : null;
+export const supabase = supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supabaseAnonKey) : null;
 
-export const supabaseAdmin = supabaseUrl && supabaseServiceKey
-  ? createClient(supabaseUrl, supabaseServiceKey)
-  : null;
+export const supabaseAdmin = supabaseUrl && supabaseServiceKey ? createClient(supabaseUrl, supabaseServiceKey) : null;
 
-const mockRepos: Repo[] = [
-  {
-    id: 'repo-1',
-    installation_id: 'inst-1',
-    full_name: 'devguard-labs/nextjs-e-commerce',
-    is_active: true,
-    created_at: new Date(Date.now() - 86400000 * 10).toISOString(),
-  },
-  {
-    id: 'repo-2',
-    installation_id: 'inst-1',
-    full_name: 'devguard-labs/auth-microservice',
-    is_active: true,
-    created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
-  },
-];
+function requireSupabaseAdmin() {
+  if (!supabaseAdmin) {
+    throw new Error('Supabase server environment variables are not configured.');
+  }
 
-const mockReviewRuns: DisplayReviewRun[] = [
-  {
-    id: 'run-101',
-    repo_id: 'repo-1',
-    pr_number: 42,
-    pr_title: 'feat: add payment gateway webhook handler and user cart checkout',
-    pr_author: 'alex-dev',
-    commit_sha: 'a7b3f9d8e12c4b5a',
-    status: 'completed',
-    tool_calls_count: 3,
-    started_at: new Date(Date.now() - 3600000 * 2).toISOString(),
-    completed_at: new Date(Date.now() - 3600000 * 2 + 18000).toISOString(),
-    created_at: new Date(Date.now() - 3600000 * 2).toISOString(),
-    agent_trace: [
-      {
-        step: 1,
-        tool: 'runLinter',
-        input: { files: ['app/api/checkout/route.ts'] },
-        output: { errorsFound: 2, summary: 'Found unhandled Promise and unsafe innerHTML assignment.' },
-        timestamp: new Date(Date.now() - 3600000 * 2 + 3000).toISOString(),
-      },
-      {
-        step: 2,
-        tool: 'scanDependencies',
-        input: { manifest: 'package.json' },
-        output: { vulnerabilities: 1, package: 'stripe-node', version: '8.0.0', severity: 'HIGH' },
-        timestamp: new Date(Date.now() - 3600000 * 2 + 9000).toISOString(),
-      },
-      {
-        step: 3,
-        tool: 'runTests',
-        input: { testFile: 'tests/checkout.test.ts' },
-        output: { passed: false, failedTests: ['checkout signature verification'] },
-        timestamp: new Date(Date.now() - 3600000 * 2 + 15000).toISOString(),
-      },
-    ],
-  },
-  {
-    id: 'run-102',
-    repo_id: 'repo-2',
-    pr_number: 18,
-    pr_title: 'fix: update JWT verification expiration check and refresh token rotation',
-    pr_author: 'sarah-security',
-    commit_sha: 'f2e9c1a4b8d7e3f0',
-    status: 'completed',
-    tool_calls_count: 2,
-    started_at: new Date(Date.now() - 86400000).toISOString(),
-    completed_at: new Date(Date.now() - 86400000 + 12000).toISOString(),
-    created_at: new Date(Date.now() - 86400000).toISOString(),
-    agent_trace: [
-      {
-        step: 1,
-        tool: 'runLinter',
-        input: { files: ['lib/auth/jwt.ts'] },
-        output: { errorsFound: 0, summary: 'No AST linter errors detected.' },
-        timestamp: new Date(Date.now() - 86400000 + 4000).toISOString(),
-      },
-      {
-        step: 2,
-        tool: 'scanDependencies',
-        input: { manifest: 'package.json' },
-        output: { vulnerabilities: 0, summary: 'All dependencies are clean.' },
-        timestamp: new Date(Date.now() - 86400000 + 8000).toISOString(),
-      },
-    ],
-  },
-];
+  return supabaseAdmin;
+}
 
-const mockFindings: Finding[] = [
-  {
-    id: 'find-1',
-    review_run_id: 'run-101',
-    severity: 'critical',
-    file_path: 'app/api/checkout/route.ts',
-    line: 34,
-    message: 'Potential SQL Injection / Unsanitized Query Input detected in database transaction query.',
-    suggested_fix: 'const user = await db.query("SELECT * FROM users WHERE id = $1", [req.body.userId]);',
-    tool_source: 'runLinter (AST Security Scanner)',
-  },
-  {
-    id: 'find-2',
-    review_run_id: 'run-101',
-    severity: 'warning',
-    file_path: 'package.json',
-    line: 18,
-    message: 'High severity vulnerability found in dependency stripe@8.0.0 (CVE-2024-3891). Upgrade recommended.',
-    suggested_fix: '"stripe": "^14.10.0"',
-    tool_source: 'scanDependencies (OSV.dev Vulnerability API)',
-  },
-  {
-    id: 'find-3',
-    review_run_id: 'run-101',
-    severity: 'info',
-    file_path: 'app/api/checkout/route.ts',
-    line: 82,
-    message: 'Missing explicit try/catch block around external payment webhook API call.',
-    suggested_fix: 'try {\n  await stripe.webhooks.constructEvent(body, sig, secret);\n} catch (err) {\n  return NextResponse.json({ error: err.message }, { status: 400 });\n}',
-    tool_source: 'runLinter',
-  },
-];
+export function getGitHubAppInstallUrl(): string | null {
+  const explicitUrl = process.env.GITHUB_APP_INSTALL_URL;
+  if (explicitUrl) return explicitUrl;
+
+  const slug = process.env.NEXT_PUBLIC_GITHUB_APP_SLUG || process.env.GITHUB_APP_SLUG;
+  return slug ? `https://github.com/apps/${slug}/installations/new` : null;
+}
 
 export async function getRepos(): Promise<Repo[]> {
-  if (supabase) {
-    const { data, error } = await supabase.from('repos').select('*').order('created_at', { ascending: false });
-    if (!error && data && data.length > 0) return data;
-  }
-  return mockRepos;
+  const db = requireSupabaseAdmin();
+  const { data, error } = await db.from('repos').select('*').order('created_at', { ascending: false });
+
+  if (error) throw new Error(`Failed to load repositories: ${error.message}`);
+  return (data ?? []) as Repo[];
 }
 
 export async function getReviewRuns(): Promise<DisplayReviewRun[]> {
-  if (supabase) {
-    const { data, error } = await supabase.from('review_runs').select('*').order('started_at', { ascending: false });
-    if (!error && data && data.length > 0) return data as DisplayReviewRun[];
+  const db = requireSupabaseAdmin();
+  const { data, error } = await db.from('review_runs').select('*').order('started_at', { ascending: false });
+
+  if (error) throw new Error(`Failed to load review runs: ${error.message}`);
+  return (data ?? []) as DisplayReviewRun[];
+}
+
+export async function getFindings(): Promise<Finding[]> {
+  const db = requireSupabaseAdmin();
+  const { data, error } = await db.from('findings').select('*').order('created_at', { ascending: false });
+
+  if (error) throw new Error(`Failed to load findings: ${error.message}`);
+  return (data ?? []) as Finding[];
+}
+
+export async function getDashboardData(): Promise<DashboardData> {
+  if (!supabaseAdmin) {
+    return {
+      repos: [],
+      reviewRuns: [],
+      findingsCountByRunId: {},
+      stats: {
+        connectedRepos: 0,
+        reviewRuns: 0,
+        toolsExecuted: 0,
+        securityFindings: 0,
+      },
+      installUrl: getGitHubAppInstallUrl(),
+      config: {
+        hasSupabase: false,
+        hasGitHubAppInstallUrl: Boolean(getGitHubAppInstallUrl()),
+      },
+    };
   }
-  return mockReviewRuns;
+
+  const [repos, reviewRuns, findings] = await Promise.all([getRepos(), getReviewRuns(), getFindings()]);
+  const realReviewRuns = reviewRuns.filter((run) => !run.is_simulation);
+  const realRunIds = new Set(realReviewRuns.map((run) => run.id));
+  const realFindings = findings.filter((finding) => realRunIds.has(finding.review_run_id));
+  const findingsCountByRunId = findings.reduce<Record<string, number>>((acc, finding) => {
+    acc[finding.review_run_id] = (acc[finding.review_run_id] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  return {
+    repos,
+    reviewRuns,
+    findingsCountByRunId,
+    stats: {
+      connectedRepos: repos.filter((repo) => repo.is_active).length,
+      reviewRuns: realReviewRuns.length,
+      toolsExecuted: realReviewRuns.reduce((sum, run) => sum + run.tool_calls_count, 0),
+      securityFindings: realFindings.length,
+    },
+    installUrl: getGitHubAppInstallUrl(),
+    config: {
+      hasSupabase: true,
+      hasGitHubAppInstallUrl: Boolean(getGitHubAppInstallUrl()),
+    },
+  };
 }
 
 export async function getReviewRunById(id: string): Promise<{ run: DisplayReviewRun | null; findings: Finding[] }> {
-  if (supabase) {
-    const { data: run, error: runError } = await supabase.from('review_runs').select('*').eq('id', id).single();
-    if (!runError && run) {
-      const { data: findings } = await supabase.from('findings').select('*').eq('review_run_id', id);
-      return { run: run as DisplayReviewRun, findings: findings || [] };
-    }
-  }
+  const db = requireSupabaseAdmin();
+  const { data: run, error: runError } = await db.from('review_runs').select('*').eq('id', id).maybeSingle();
 
-  const run = mockReviewRuns.find((r) => r.id === id) || null;
-  const findings = mockFindings.filter((f) => f.review_run_id === id);
-  return { run, findings };
+  if (runError) throw new Error(`Failed to load review run: ${runError.message}`);
+  if (!run) return { run: null, findings: [] };
+
+  const { data: findings, error: findingsError } = await db
+    .from('findings')
+    .select('*')
+    .eq('review_run_id', id)
+    .order('created_at', { ascending: false });
+
+  if (findingsError) throw new Error(`Failed to load findings: ${findingsError.message}`);
+  return { run: run as DisplayReviewRun, findings: (findings ?? []) as Finding[] };
 }
 
 export async function ensureRepoForInstallation(input: {
@@ -166,117 +127,107 @@ export async function ensureRepoForInstallation(input: {
   accountLogin: string;
   fullName: string;
 }): Promise<Repo> {
-  if (supabaseAdmin) {
-    const { data: existingInstallation } = await supabaseAdmin
-      .from('installations')
-      .select('*')
-      .eq('github_installation_id', input.githubInstallationId)
-      .maybeSingle();
+  const db = requireSupabaseAdmin();
+  const { data: existingInstallation, error: installationLookupError } = await db
+    .from('installations')
+    .select('*')
+    .eq('github_installation_id', input.githubInstallationId)
+    .maybeSingle();
 
-    const installation =
-      existingInstallation ??
-      (
-        await supabaseAdmin
-          .from('installations')
-          .insert({
-            github_installation_id: input.githubInstallationId,
-            account_login: input.accountLogin,
-          })
-          .select()
-          .single()
-      ).data;
+  if (installationLookupError) throw new Error(`Failed to look up GitHub installation: ${installationLookupError.message}`);
 
-    if (installation) {
-      const { data: existingRepo } = await supabaseAdmin
-        .from('repos')
-        .select('*')
-        .eq('installation_id', installation.id)
-        .eq('full_name', input.fullName)
-        .maybeSingle();
-
-      if (existingRepo) return existingRepo as Repo;
-
-      const { data: createdRepo } = await supabaseAdmin
-        .from('repos')
+  const installation =
+    existingInstallation ??
+    (
+      await db
+        .from('installations')
         .insert({
-          installation_id: installation.id,
-          full_name: input.fullName,
-          is_active: true,
+          github_installation_id: input.githubInstallationId,
+          account_login: input.accountLogin,
         })
         .select()
-        .single();
+        .single()
+    ).data;
 
-      if (createdRepo) return createdRepo as Repo;
-    }
-  }
+  if (!installation) throw new Error('Could not create GitHub installation row.');
 
-  const existingMockRepo = mockRepos.find((repo) => repo.full_name === input.fullName);
-  if (existingMockRepo) return existingMockRepo;
+  const { data: existingRepo, error: repoLookupError } = await db
+    .from('repos')
+    .select('*')
+    .eq('installation_id', installation.id)
+    .eq('full_name', input.fullName)
+    .maybeSingle();
 
-  const mockRepo: Repo = {
-    id: `repo-${Date.now()}`,
-    installation_id: 'inst-1',
-    full_name: input.fullName,
-    is_active: true,
-    created_at: new Date().toISOString(),
-  };
-  mockRepos.unshift(mockRepo);
-  return mockRepo;
+  if (repoLookupError) throw new Error(`Failed to look up repository: ${repoLookupError.message}`);
+  if (existingRepo) return existingRepo as Repo;
+
+  const { data: createdRepo, error: createRepoError } = await db
+    .from('repos')
+    .insert({
+      installation_id: installation.id,
+      full_name: input.fullName,
+      is_active: true,
+    })
+    .select()
+    .single();
+
+  if (createRepoError) throw new Error(`Failed to create repository row: ${createRepoError.message}`);
+  if (!createdRepo) throw new Error('Could not create repository row.');
+  return createdRepo as Repo;
 }
 
-export async function createReviewRun(data: Partial<NewReviewRun>): Promise<DisplayReviewRun> {
-  const newRun: DisplayReviewRun = {
-    id: `run-${Date.now()}`,
-    repo_id: data.repo_id || 'repo-1',
-    pr_number: data.pr_number || Math.floor(Math.random() * 100) + 1,
-    pr_title: data.pr_title || 'PR Review Run',
-    pr_author: data.pr_author || 'developer',
-    commit_sha: data.commit_sha || 'sha-' + Math.random().toString(36).substring(7),
-    status: data.status || 'running',
-    tool_calls_count: 0,
-    agent_trace: [],
-    started_at: new Date().toISOString(),
-    completed_at: null,
-    created_at: new Date().toISOString(),
+export async function createReviewRun(data: NewReviewRun): Promise<DisplayReviewRun> {
+  const db = requireSupabaseAdmin();
+  const insertData = {
+    repo_id: data.repo_id,
+    pr_number: data.pr_number,
+    pr_title: data.pr_title ?? null,
+    pr_author: data.pr_author ?? null,
+    commit_sha: data.commit_sha,
+    status: data.status,
+    tool_calls_count: data.tool_calls_count ?? 0,
+    agent_trace: data.agent_trace ?? [],
+    error_message: data.error_message ?? null,
+    is_simulation: data.is_simulation ?? false,
+    started_at: data.started_at ?? new Date().toISOString(),
+    completed_at: data.completed_at ?? null,
   };
 
-  if (supabaseAdmin) {
-    const insertData = {
-      repo_id: newRun.repo_id,
-      pr_number: newRun.pr_number,
-      commit_sha: newRun.commit_sha,
-      status: newRun.status,
-      started_at: newRun.started_at,
-      completed_at: newRun.completed_at,
-    };
-    const { data: created } = await supabaseAdmin.from('review_runs').insert(insertData).select().single();
-    if (created) return { ...newRun, ...created } as DisplayReviewRun;
-  }
+  const { data: created, error } = await db.from('review_runs').insert(insertData).select().single();
+  if (error) throw new Error(`Failed to create review run: ${error.message}`);
+  return created as DisplayReviewRun;
+}
 
-  mockReviewRuns.unshift(newRun);
-  return newRun;
+export async function updateReviewRun(
+  id: string,
+  data: Partial<{
+    status: ReviewStatus;
+    tool_calls_count: number;
+    agent_trace: AgentTraceStep[];
+    error_message: string | null;
+    completed_at: string | null;
+  }>
+): Promise<void> {
+  const db = requireSupabaseAdmin();
+  const { error } = await db.from('review_runs').update(data).eq('id', id);
+  if (error) throw new Error(`Failed to update review run: ${error.message}`);
 }
 
 export async function saveFindings(findings: NewFinding[]): Promise<Finding[]> {
-  const formatted: Finding[] = findings.map((f, i) => ({
-    ...f,
-    id: `find-${Date.now()}-${i}`,
+  if (findings.length === 0) return [];
+
+  const db = requireSupabaseAdmin();
+  const insertData = findings.map((finding) => ({
+    review_run_id: finding.review_run_id,
+    severity: finding.severity,
+    file_path: finding.file_path,
+    line: finding.line,
+    message: finding.message,
+    suggested_fix: finding.suggested_fix,
+    tool_source: finding.tool_source,
   }));
 
-  if (supabaseAdmin && formatted.length > 0) {
-    const insertData = formatted.map((finding) => ({
-      review_run_id: finding.review_run_id,
-      severity: finding.severity,
-      file_path: finding.file_path,
-      line: finding.line,
-      message: finding.message,
-      suggested_fix: finding.suggested_fix,
-      tool_source: finding.tool_source,
-    }));
-    const { data } = await supabaseAdmin.from('findings').insert(insertData).select();
-    if (data) return data as Finding[];
-  }
-
-  mockFindings.unshift(...formatted);
-  return formatted;
+  const { data, error } = await db.from('findings').insert(insertData).select();
+  if (error) throw new Error(`Failed to save findings: ${error.message}`);
+  return (data ?? []) as Finding[];
 }
