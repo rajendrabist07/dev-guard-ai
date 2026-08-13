@@ -33,13 +33,15 @@ docs/github-app-setup.md
 
 ## Setup
 
+### 2. Configure Environment Variables
+
+Copy `.env.example` to `.env.local`:
+
 ```bash
-npm install
 cp .env.example .env.local
-npm run dev
 ```
 
-Required environment variables are documented in `.env.example`:
+Fill in your secrets. **Note:** DevGuard AI features **Graceful Degradation**. If you do not have Supabase, GitHub, or Groq API keys configured yet, the app will automatically fall back to an intelligent mock state so you can still test the UI and simulated PR reviews without crashing!
 
 ```env
 GITHUB_APP_ID=
