@@ -35,27 +35,51 @@ export function getGitHubAppInstallUrl(): string | null {
 }
 
 export async function getRepos(): Promise<Repo[]> {
-  const db = requireSupabaseAdmin();
-  const { data, error } = await db.from('repos').select('*').order('created_at', { ascending: false });
+  try {
+    const db = requireSupabaseAdmin();
+    const { data, error } = await db.from('repos').select('*').order('created_at', { ascending: false });
 
-  if (error) throw new Error(`Failed to load repositories: ${error.message}`);
-  return (data ?? []) as Repo[];
+    if (error) {
+      console.warn(`Repositories table query: ${error.message}`);
+      return [];
+    }
+    return (data ?? []) as Repo[];
+  } catch (err) {
+    console.warn('getRepos fallback:', err);
+    return [];
+  }
 }
 
 export async function getReviewRuns(): Promise<DisplayReviewRun[]> {
-  const db = requireSupabaseAdmin();
-  const { data, error } = await db.from('review_runs').select('*').order('started_at', { ascending: false });
+  try {
+    const db = requireSupabaseAdmin();
+    const { data, error } = await db.from('review_runs').select('*').order('started_at', { ascending: false });
 
-  if (error) throw new Error(`Failed to load review runs: ${error.message}`);
-  return (data ?? []) as DisplayReviewRun[];
+    if (error) {
+      console.warn(`Review runs table query: ${error.message}`);
+      return [];
+    }
+    return (data ?? []) as DisplayReviewRun[];
+  } catch (err) {
+    console.warn('getReviewRuns fallback:', err);
+    return [];
+  }
 }
 
 export async function getFindings(): Promise<Finding[]> {
-  const db = requireSupabaseAdmin();
-  const { data, error } = await db.from('findings').select('*').order('created_at', { ascending: false });
+  try {
+    const db = requireSupabaseAdmin();
+    const { data, error } = await db.from('findings').select('*').order('created_at', { ascending: false });
 
-  if (error) throw new Error(`Failed to load findings: ${error.message}`);
-  return (data ?? []) as Finding[];
+    if (error) {
+      console.warn(`Findings table query: ${error.message}`);
+      return [];
+    }
+    return (data ?? []) as Finding[];
+  } catch (err) {
+    console.warn('getFindings fallback:', err);
+    return [];
+  }
 }
 
 export async function getDashboardData(): Promise<DashboardData> {
