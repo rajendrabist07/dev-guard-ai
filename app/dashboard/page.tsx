@@ -17,6 +17,7 @@ import {
   Plus,
   RefreshCw,
   ChevronRight,
+  BookOpen,
 } from 'lucide-react';
 
 export default function DashboardPage({ searchParams }: { searchParams: Promise<{ simulate?: string }> }) {
@@ -111,14 +112,15 @@ export default function DashboardPage({ searchParams }: { searchParams: Promise<
           <div className="flex items-center space-x-3">
             <button
               onClick={loadData}
-              className="p-2.5 rounded-xl bg-gray-800 text-gray-300 hover:text-white hover:bg-gray-700 transition-colors"
+              aria-label="Refresh Dashboard Data"
+              className="p-2.5 rounded-xl bg-gray-800 text-gray-300 hover:text-white hover:bg-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500"
               title="Refresh Data"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
             <button
               onClick={() => setIsSimulateOpen(true)}
-              className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs shadow-lg shadow-emerald-500/20 transition-all"
+              className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs shadow-lg shadow-emerald-500/20 transition-all focus:outline-none focus:ring-2 focus:ring-emerald-400"
             >
               <Play className="w-3.5 h-3.5 fill-black" />
               <span>Simulate PR Review</span>
@@ -126,14 +128,18 @@ export default function DashboardPage({ searchParams }: { searchParams: Promise<
           </div>
         </div>
 
-        {/* Overview Stats */}
+        {/* Overview Stats Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="p-5 rounded-2xl bg-gray-900/50 border border-gray-800/80 space-y-2">
             <div className="flex items-center justify-between text-xs text-gray-400 font-medium">
               <span>Connected Repositories</span>
               <Github className="w-4 h-4 text-emerald-400" />
             </div>
-            <div className="text-2xl font-extrabold text-white">{loading ? '-' : stats.connectedRepos}</div>
+            {loading ? (
+              <div className="h-8 w-16 bg-gray-800/80 animate-pulse rounded-lg my-1" />
+            ) : (
+              <div className="text-2xl font-extrabold text-white">{stats.connectedRepos}</div>
+            )}
             <div className="text-[11px] text-emerald-400 font-mono flex items-center gap-1">
               <CheckCircle2 className="w-3 h-3" /> Active Webhook Subscriptions
             </div>
@@ -144,8 +150,12 @@ export default function DashboardPage({ searchParams }: { searchParams: Promise<
               <span>PR Review Runs</span>
               <GitPullRequest className="w-4 h-4 text-teal-400" />
             </div>
-            <div className="text-2xl font-extrabold text-white">{loading ? '-' : stats.reviewRuns}</div>
-            <div className="text-[11px] text-teal-400 font-mono">Loaded from review_runs</div>
+            {loading ? (
+              <div className="h-8 w-16 bg-gray-800/80 animate-pulse rounded-lg my-1" />
+            ) : (
+              <div className="text-2xl font-extrabold text-white">{stats.reviewRuns}</div>
+            )}
+            <div className="text-[11px] text-teal-400 font-mono">Total pull requests reviewed</div>
           </div>
 
           <div className="p-5 rounded-2xl bg-gray-900/50 border border-gray-800/80 space-y-2">
@@ -153,10 +163,12 @@ export default function DashboardPage({ searchParams }: { searchParams: Promise<
               <span>Tools Executed</span>
               <Cpu className="w-4 h-4 text-cyan-400" />
             </div>
-            <div className="text-2xl font-extrabold text-white">
-              {loading ? '-' : stats.toolsExecuted}
-            </div>
-            <div className="text-[11px] text-cyan-400 font-mono">Summed from tool_calls_count</div>
+            {loading ? (
+              <div className="h-8 w-16 bg-gray-800/80 animate-pulse rounded-lg my-1" />
+            ) : (
+              <div className="text-2xl font-extrabold text-white">{stats.toolsExecuted}</div>
+            )}
+            <div className="text-[11px] text-cyan-400 font-mono">Empirical AST, CVE & test executions</div>
           </div>
 
           <div className="p-5 rounded-2xl bg-gray-900/50 border border-gray-800/80 space-y-2">
@@ -164,8 +176,12 @@ export default function DashboardPage({ searchParams }: { searchParams: Promise<
               <span>Security Findings</span>
               <ShieldAlert className="w-4 h-4 text-rose-400" />
             </div>
-            <div className="text-2xl font-extrabold text-white">{loading ? '-' : stats.securityFindings}</div>
-            <div className="text-[11px] text-rose-400 font-mono">Counted from findings</div>
+            {loading ? (
+              <div className="h-8 w-16 bg-gray-800/80 animate-pulse rounded-lg my-1" />
+            ) : (
+              <div className="text-2xl font-extrabold text-white">{stats.securityFindings}</div>
+            )}
+            <div className="text-[11px] text-rose-400 font-mono">Critical & warning advisories</div>
           </div>
         </div>
 
@@ -179,54 +195,68 @@ export default function DashboardPage({ searchParams }: { searchParams: Promise<
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-white tracking-tight">Monitored Repositories</h2>
-            <a
-              href={dashboardData?.installUrl ?? '#'}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-disabled={!dashboardData?.installUrl}
-              className={`text-xs font-semibold flex items-center space-x-1 ${
-                dashboardData?.installUrl
-                  ? 'text-emerald-400 hover:text-emerald-300'
-                  : 'text-gray-600 pointer-events-none'
-              }`}
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>{dashboardData?.installUrl ? 'Install GitHub App on New Repo' : 'GitHub App not configured'}</span>
-            </a>
+            {dashboardData?.installUrl ? (
+              <a
+                href={dashboardData.installUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs font-semibold flex items-center space-x-1 text-emerald-400 hover:text-emerald-300 transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Install GitHub App on New Repo</span>
+              </a>
+            ) : (
+              <a
+                href="https://github.com/settings/apps/new"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs font-semibold flex items-center space-x-1 text-emerald-400 hover:text-emerald-300 transition-colors"
+              >
+                <BookOpen className="w-3.5 h-3.5" />
+                <span>Configure GitHub App</span>
+              </a>
+            )}
           </div>
 
           {loading ? (
-            <div className="rounded-2xl bg-gray-900/60 border border-gray-800/80 p-8 text-center text-sm text-gray-400">
-              Loading repositories...
+            <div className="rounded-2xl bg-gray-900/60 border border-gray-800/80 p-8 text-center text-sm text-gray-400 space-y-3">
+              <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />
+              <div>Fetching connected repositories...</div>
             </div>
           ) : repos.length === 0 ? (
-            <div className="rounded-2xl bg-gray-900/60 border border-gray-800/80 p-8 text-center text-sm text-gray-400">
-              No repositories connected yet. Create and install the GitHub App to start real PR reviews.
+            <div className="rounded-2xl bg-gray-900/60 border border-gray-800/80 p-8 text-center text-sm text-gray-400 space-y-3">
+              <Github className="w-10 h-10 text-gray-600 mx-auto mb-2" />
+              <div className="font-semibold text-gray-300">No repositories connected yet</div>
+              <p className="text-xs text-gray-500 max-w-md mx-auto">
+                Install your GitHub App on a repository or run an interactive simulation below to test the autonomous review loop.
+              </p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {repos.map((repo) => (
-              <div
-                key={repo.id}
-                className="p-5 rounded-2xl bg-gray-900/60 border border-gray-800/80 hover:border-gray-700 transition-all flex items-center justify-between"
-              >
-                <div className="flex items-center space-x-3">
-                  <div className="p-2.5 rounded-xl bg-gray-800 text-gray-300">
-                    <Github className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <div className="font-bold text-sm text-white flex items-center gap-2">
-                      <span>{repo.full_name}</span>
-                      <ExternalLink className="w-3.5 h-3.5 text-gray-500" />
+              {repos.map((repo) => (
+                <div
+                  key={repo.id}
+                  className="p-5 rounded-2xl bg-gray-900/60 border border-gray-800/80 hover:border-gray-700 transition-all flex items-center justify-between"
+                >
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2.5 rounded-xl bg-gray-800 text-gray-300">
+                      <Github className="w-5 h-5" />
                     </div>
-                    <div className="text-xs text-gray-400 mt-0.5 font-mono">Status: {repo.is_active ? 'active' : 'inactive'}</div>
+                    <div>
+                      <div className="font-bold text-sm text-white flex items-center gap-2">
+                        <span>{repo.full_name}</span>
+                        <ExternalLink className="w-3.5 h-3.5 text-gray-500" />
+                      </div>
+                      <div className="text-xs text-gray-400 mt-0.5 font-mono">
+                        Status: {repo.is_active ? 'Active' : 'Inactive'}
+                      </div>
+                    </div>
                   </div>
+                  <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
+                    Active
+                  </span>
                 </div>
-                <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
-                  Active
-                </span>
-              </div>
-            ))}
+              ))}
             </div>
           )}
         </div>
@@ -253,10 +283,17 @@ export default function DashboardPage({ searchParams }: { searchParams: Promise<
 
           <div className="bg-gray-900/60 border border-gray-800 rounded-2xl overflow-hidden">
             {loading ? (
-              <div className="text-center py-12 text-gray-500 text-xs font-mono">Loading review runs...</div>
+              <div className="text-center py-12 text-gray-400 text-xs font-mono space-y-3">
+                <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />
+                <div>Loading review runs...</div>
+              </div>
             ) : filteredRuns.length === 0 ? (
-              <div className="text-center py-12 text-gray-500 text-xs font-mono">
-                No reviews yet. Install the GitHub App or run a clearly marked simulation to get started.
+              <div className="text-center py-12 text-gray-400 text-xs space-y-3">
+                <GitPullRequest className="w-8 h-8 text-gray-600 mx-auto" />
+                <div className="font-semibold text-gray-300">No review runs recorded yet</div>
+                <p className="text-gray-500 max-w-sm mx-auto">
+                  Create a pull request on your repository or click <strong>Simulate PR Review</strong> to test the agentic loop live!
+                </p>
               </div>
             ) : (
               <div className="divide-y divide-gray-800/80">
