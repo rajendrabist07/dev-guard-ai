@@ -3,6 +3,14 @@ import { scanDependencies } from './tools/deps-scan';
 import { runLinter } from './tools/lint';
 import { runTests } from './tools/test-runner';
 
+export interface ProgressUpdate {
+  step: number;
+  totalSteps: number;
+  message: string;
+  tool?: string;
+  output?: unknown;
+}
+
 export interface OrchestrationResult {
   findings: NewFinding[];
   trace: AgentTraceStep[];
@@ -18,7 +26,7 @@ function toRecord(value: unknown): Record<string, unknown> {
 }
 
 function shouldScanDependencies(diff: string, fileNames: string[]): boolean {
-  return fileNames.some((fileName) => fileName.endsWith('package.json')) || /dependencies|devDependencies/.test(diff);
+  return fileNames.some((fileName) => fileName.endsWith('package.json')) || /dependencies|devDependencies|"axios"|"lodash"|"express"|"stripe"|"jsonwebtoken"|"minimist"/.test(diff);
 }
 
 function shouldRunTests(diff: string): boolean {
@@ -28,10 +36,12 @@ function shouldRunTests(diff: string): boolean {
 export async function runAgentOrchestrator(
   prDiff: string,
   fileNames: string[],
-  reviewRunId = 'sim-run'
+  reviewRunId = 'sim-run',
+  onProgress?: (progress: ProgressUpdate) => void | Promise<void>
 ): Promise<OrchestrationResult> {
   const trace: AgentTraceStep[] = [];
   const findings: NewFinding[] = [];
+  const totalSteps = 4;
 
   const recordTrace = (tool: string, input: Record<string, unknown>, output: Record<string, unknown>) => {
     if (trace.length >= MAX_ITERATIONS) return;
@@ -43,6 +53,16 @@ export async function runAgentOrchestrator(
       timestamp: new Date().toISOString(),
     });
   };
+
+  // Step 1: AST Linter
+  if (onProgress) {
+    await onProgress({
+      step: 1,
+      totalSteps,
+      message: 'Analyzing code structure & executing AST Linter...',
+      tool: 'runLinter',
+    });
+  }
 
   const lintResult = await runLinter(fileNames, prDiff);
   recordTrace('runLinter', { files: fileNames }, toRecord(lintResult));
@@ -56,6 +76,16 @@ export async function runAgentOrchestrator(
       message: item.message,
       suggested_fix: item.suggestedFix ?? null,
       tool_source: 'runLinter',
+    });
+  }
+
+  // Step 2: Dependency Scan
+  if (onProgress) {
+    await onProgress({
+      step: 2,
+      totalSteps,
+      message: 'Checking dependencies for known CVE vulnerabilities in OSV.dev...',
+      tool: 'scanDependencies',
     });
   }
 
@@ -79,6 +109,16 @@ export async function runAgentOrchestrator(
     }
   }
 
+  // Step 3: Test Suite Runner
+  if (onProgress) {
+    await onProgress({
+      step: 3,
+      totalSteps,
+      message: 'Executing programmatic test suite validation...',
+      tool: 'runTests',
+    });
+  }
+
   if (trace.length < MAX_ITERATIONS && shouldRunTests(prDiff)) {
     const testResult = await runTests(undefined, prDiff);
     recordTrace('runTests', { command: 'npm test' }, toRecord(testResult));
@@ -94,6 +134,16 @@ export async function runAgentOrchestrator(
         tool_source: 'runTests',
       });
     }
+  }
+
+  // Step 4: LLM Synthesis
+  if (onProgress) {
+    await onProgress({
+      step: 4,
+      totalSteps,
+      message: 'Synthesizing findings & generating structured review report...',
+      tool: 'synthesizeReview',
+    });
   }
 
   const criticals = findings.filter((finding) => finding.severity === 'critical').length;

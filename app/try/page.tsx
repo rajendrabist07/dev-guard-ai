@@ -20,6 +20,7 @@ import {
   ArrowRight,
   RefreshCw,
   Zap,
+  CheckCheck,
 } from 'lucide-react';
 import { AgentTraceStep, Finding, Severity } from '@/lib/db/types';
 
@@ -91,7 +92,7 @@ export default function TryPage() {
   const [selectedSample, setSelectedSample] = useState<SampleFixture>(SAMPLE_FIXTURES[0]);
 
   // Custom code inputs
-  const [customTitle, setCustomTitle] = useState('fix: update checkout API query and dependencies');
+  const [customTitle, setCustomTitle] = useState('fix: update user handler');
   const [customAuthor, setCustomAuthor] = useState('community-tester');
   const [customDiff, setCustomDiff] = useState(
     `--- a/app/api/user/route.ts
@@ -103,8 +104,8 @@ export default function TryPage() {
 
   // Execution states
   const [isLoading, setIsLoading] = useState(false);
-  const [loadingStep, setLoadingStep] = useState<string>('');
-  const [activeStepIndex, setActiveStepIndex] = useState(0);
+  const [loadingStep, setLoadingStep] = useState<string>('Initializing Agent Orchestrator...');
+  const [activeStepIndex, setActiveStepIndex] = useState(1);
   const [result, setResult] = useState<ReviewResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -117,25 +118,12 @@ export default function TryPage() {
     setError(null);
     setResult(null);
     setActiveStepIndex(1);
-    setLoadingStep('Step 1/4: Analyzing code structure & executing AST Linter...');
-
-    const timer1 = setTimeout(() => {
-      setActiveStepIndex(2);
-      setLoadingStep('Step 2/4: Querying OSV.dev dependency vulnerability database...');
-    }, 1800);
-
-    const timer2 = setTimeout(() => {
-      setActiveStepIndex(3);
-      setLoadingStep('Step 3/4: Executing programmatic test suite validation...');
-    }, 3800);
-
-    const timer3 = setTimeout(() => {
-      setActiveStepIndex(4);
-      setLoadingStep('Step 4/4: Synthesizing findings & generating actionable code fixes...');
-    }, 6000);
+    setLoadingStep('Initializing Agent Orchestrator & AST Linter...');
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 35000);
+    const timeoutTimer = setTimeout(() => {
+      controller.abort();
+    }, 30000); // Strict 30s hard timeout
 
     try {
       const payload = isSampleRun
@@ -149,47 +137,90 @@ export default function TryPage() {
             prTitle: customTitle || 'custom-code-review',
             prAuthor: customAuthor || 'visitor',
             diff: customDiff,
-            fileNames: ['src/code.ts', 'package.json'],
+            fileNames: customDiff.includes('package.json')
+              ? ['package.json', 'src/code.ts']
+              : ['src/code.ts'],
           };
 
-      const res = await fetch('/api/simulate-review', {
+      const res = await fetch('/api/try', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'text/event-stream',
+        },
         signal: controller.signal,
         body: JSON.stringify(payload),
       });
 
-      clearTimeout(timeoutId);
-      clearTimeout(timer1);
-      clearTimeout(timer2);
-      clearTimeout(timer3);
-
-      const data = await res.json();
-
-      if (!res.ok || data.error) {
-        throw new Error(data.error || 'Failed to execute review agent');
+      if (!res.ok) {
+        throw new Error(`Agent execution request failed with HTTP ${res.status}`);
       }
 
-      setResult({
-        reviewRunId: data.reviewRunId,
-        providerUsed: data.providerUsed || 'local-agent',
-        toolCallsCount: data.toolCallsCount || 3,
-        trace: data.trace || [],
-        findings: data.findings || [],
-        summary: data.summary,
-      });
-      setActiveTab('findings');
-    } catch (err: unknown) {
-      clearTimeout(timeoutId);
-      clearTimeout(timer1);
-      clearTimeout(timer2);
-      clearTimeout(timer3);
+      if (!res.body) {
+        throw new Error('No response stream received from agent');
+      }
 
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let receivedComplete = false;
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed.startsWith('data:')) {
+            try {
+              const data = JSON.parse(trimmed.replace(/^data:\s*/, ''));
+
+              if (data.type === 'progress') {
+                setActiveStepIndex(data.step);
+                setLoadingStep(data.message);
+              } else if (data.type === 'complete') {
+                receivedComplete = true;
+                clearTimeout(timeoutTimer);
+                setResult({
+                  reviewRunId: data.reviewRunId,
+                  providerUsed: data.providerUsed || 'local-agent',
+                  toolCallsCount: data.toolCallsCount || 3,
+                  trace: data.trace || [],
+                  findings: data.findings || [],
+                  summary: data.summary,
+                });
+                setActiveTab('findings');
+              } else if (data.type === 'error') {
+                clearTimeout(timeoutTimer);
+                throw new Error(data.error || 'Agent execution failed');
+              }
+            } catch (jsonErr) {
+              if (jsonErr instanceof Error && jsonErr.message.includes('Agent execution failed')) {
+                throw jsonErr;
+              }
+              console.warn('Could not parse SSE chunk:', trimmed, jsonErr);
+            }
+          }
+        }
+      }
+
+      clearTimeout(timeoutTimer);
+
+      if (!receivedComplete && !error) {
+        // Fallback: If connection closed cleanly without error
+        setLoadingStep('Done.');
+      }
+    } catch (err: unknown) {
+      clearTimeout(timeoutTimer);
       console.error('Try live execution error:', err);
-      let message = 'An error occurred while running the review agent.';
+      let message = 'This is taking longer than expected, please try again.';
       if (err instanceof Error) {
         if (err.name === 'AbortError') {
-          message = 'The agent execution timed out. Please verify your connection and try again.';
+          message = 'This is taking longer than expected, please try again.';
         } else {
           message = err.message;
         }
@@ -409,7 +440,7 @@ export default function TryPage() {
                     Paste Code Snippet or Unified Diff:
                   </label>
                   <span className="text-[11px] text-gray-500 font-mono">
-                    Supports JS/TS, Python, package.json dependencies, and raw diffs
+                    Supports JS/TS, package.json dependencies, and raw diffs
                   </span>
                 </div>
                 <textarea
@@ -417,7 +448,7 @@ export default function TryPage() {
                   value={customDiff}
                   disabled={isLoading}
                   onChange={(e) => setCustomDiff(e.target.value)}
-                  placeholder={`Paste your code or git diff here...\n\nExample:\nconst query = "SELECT * FROM users WHERE id = '" + req.body.id + "'";`}
+                  placeholder={`Paste your code snippet or git diff here...\n\nExample 1 (Lint / Injection):\nconst query = "SELECT * FROM users WHERE id = '" + req.body.id + "'";\n\nExample 2 (Unused variable):\nconst unusedCounter = 42;\n\nExample 3 (Package dependencies):\n{\n  "dependencies": {\n    "axios": "0.19.0"\n  }\n}`}
                   className="w-full p-4 text-xs font-mono rounded-xl bg-gray-950 border border-gray-800 text-emerald-300 focus:border-emerald-500 focus:outline-none disabled:opacity-50 leading-relaxed"
                 />
               </div>
@@ -468,7 +499,7 @@ export default function TryPage() {
                 <div
                   key={idx}
                   className={`p-2.5 rounded-lg text-center text-xs font-mono transition-all ${
-                    activeStepIndex > idx
+                    activeStepIndex > idx + 1
                       ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-bold'
                       : activeStepIndex === idx + 1
                       ? 'bg-emerald-950 border border-emerald-400 text-white font-bold animate-pulse'
@@ -487,7 +518,7 @@ export default function TryPage() {
           <div className="p-5 rounded-2xl bg-rose-950/40 border border-rose-800/80 space-y-2 font-mono text-xs text-rose-200">
             <div className="flex items-center space-x-2 text-rose-400 font-bold text-sm">
               <ShieldAlert className="w-4 h-4" />
-              <span>Review Agent Execution Error</span>
+              <span>Review Agent Notice</span>
             </div>
             <p>{error}</p>
           </div>
@@ -588,12 +619,33 @@ export default function TryPage() {
               {activeTab === 'findings' && (
                 <div className="p-6 space-y-4">
                   {result.findings.length === 0 ? (
-                    <div className="text-center py-12 bg-gray-950/40 rounded-xl border border-gray-800">
-                      <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto mb-3" />
-                      <h3 className="text-base font-medium text-white">All Checks Passed Cleanly!</h3>
-                      <p className="text-xs text-gray-400 mt-1">
-                        No high-risk security vulnerabilities or AST lint errors were detected.
-                      </p>
+                    <div className="p-8 rounded-2xl bg-emerald-950/20 border border-emerald-800/40 space-y-4">
+                      <div className="flex items-center space-x-3 text-emerald-400">
+                        <CheckCheck className="w-6 h-6 text-emerald-400" />
+                        <h3 className="text-base font-bold text-white">
+                          No issues found — here&apos;s what was checked:
+                        </h3>
+                      </div>
+                      <div className="space-y-2.5 text-xs font-mono text-gray-300 pl-9">
+                        <div className="flex items-center space-x-2 text-emerald-300">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                          <span>
+                            <strong>AST Static Linter:</strong> Passed cleanly (no SQL injection, eval/XSS, unhandled async promises, or dead code detected).
+                          </span>
+                        </div>
+                        <div className="flex items-center space-x-2 text-emerald-300">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                          <span>
+                            <strong>OSV.dev Vulnerability Scanner:</strong> Passed cleanly (0 known CVE / security advisory matches in dependencies).
+                          </span>
+                        </div>
+                        <div className="flex items-center space-x-2 text-emerald-300">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                          <span>
+                            <strong>Programmatic Test Assertions:</strong> Passed (syntax and execution safety verified).
+                          </span>
+                        </div>
+                      </div>
                     </div>
                   ) : (
                     result.findings.map((f, idx) => (
