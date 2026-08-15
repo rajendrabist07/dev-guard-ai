@@ -583,7 +583,7 @@ export default function TryPage() {
 
             <p className="text-sm text-gray-200 font-mono pl-8">{loadingStep}</p>
 
-            <div className="grid grid-cols-4 gap-2 pt-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2">
               {[
                 '1. AST Linter',
                 '2. OSV CVE Scan',

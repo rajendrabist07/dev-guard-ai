@@ -199,22 +199,22 @@ export default function TryResultPage({ params }: { params: Promise<{ id: string
               </div>
 
               {/* Severity Breakdown */}
-              <div className="grid grid-cols-3 gap-3 pt-3">
-                <div className="p-3 rounded-xl bg-rose-950/20 border border-rose-900/40 flex items-center justify-between">
-                  <span className="text-xs text-rose-400 font-medium">Critical</span>
-                  <span className="text-base font-bold text-rose-300">
+              <div className="grid grid-cols-3 gap-2 sm:gap-3 pt-3">
+                <div className="p-2.5 sm:p-3 rounded-xl bg-rose-950/20 border border-rose-900/40 flex items-center justify-between">
+                  <span className="text-[11px] sm:text-xs text-rose-400 font-medium">Critical</span>
+                  <span className="text-sm sm:text-base font-bold text-rose-300">
                     {run.findings.filter((f) => f.severity === 'critical').length}
                   </span>
                 </div>
-                <div className="p-3 rounded-xl bg-amber-950/20 border border-amber-900/40 flex items-center justify-between">
-                  <span className="text-xs text-amber-400 font-medium">Warnings</span>
-                  <span className="text-base font-bold text-amber-300">
+                <div className="p-2.5 sm:p-3 rounded-xl bg-amber-950/20 border border-amber-900/40 flex items-center justify-between">
+                  <span className="text-[11px] sm:text-xs text-amber-400 font-medium">Warnings</span>
+                  <span className="text-sm sm:text-base font-bold text-amber-300">
                     {run.findings.filter((f) => f.severity === 'warning').length}
                   </span>
                 </div>
-                <div className="p-3 rounded-xl bg-cyan-950/20 border border-cyan-900/40 flex items-center justify-between">
-                  <span className="text-xs text-cyan-400 font-medium">Informational</span>
-                  <span className="text-base font-bold text-cyan-300">
+                <div className="p-2.5 sm:p-3 rounded-xl bg-cyan-950/20 border border-cyan-900/40 flex items-center justify-between">
+                  <span className="text-[11px] sm:text-xs text-cyan-400 font-medium">Info</span>
+                  <span className="text-sm sm:text-base font-bold text-cyan-300">
                     {run.findings.filter((f) => f.severity === 'info').length}
                   </span>
                 </div>
@@ -223,7 +223,7 @@ export default function TryResultPage({ params }: { params: Promise<{ id: string
 
             {/* Tabbed Results Body */}
             <div className="rounded-2xl bg-gray-900/60 border border-gray-800 overflow-hidden">
-              <div className="px-6 border-b border-gray-800 bg-gray-950/60 flex space-x-6">
+              <div className="px-4 sm:px-6 border-b border-gray-800 bg-gray-950/60 flex space-x-4 sm:space-x-6 overflow-x-auto">
                 <button
                   onClick={() => setActiveTab('findings')}
                   className={`py-3.5 text-xs font-semibold border-b-2 flex items-center space-x-2 transition-colors ${
