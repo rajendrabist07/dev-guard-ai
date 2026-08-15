@@ -2,7 +2,7 @@
  * DevGuard AI - Centralized GitHub App Configuration & Single Source of Truth
  */
 
-export const DEFAULT_GITHUB_APP_SLUG = 'devguard-ai-rajendra';
+export const DEFAULT_GITHUB_APP_SLUG = 'devguard-agent';
 
 /**
  * Returns the configured GitHub App slug from environment variables,
