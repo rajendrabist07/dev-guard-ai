@@ -178,16 +178,25 @@ export default function SimulateReviewModal({ onClose, onSimulationComplete }: S
 
           {/* Results preview if finished */}
           {simulationResult && (
-            <div className="p-4 rounded-xl bg-emerald-950/40 border border-emerald-800/80 space-y-2 font-mono text-xs">
-              <div className="flex items-center space-x-2 text-emerald-400 font-bold">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                <span>Simulation Complete! Provider: [{simulationResult.providerUsed}]</span>
+            simulationResult.error ? (
+              <div className="p-4 rounded-xl bg-rose-950/40 border border-rose-800/80 space-y-2 font-mono text-xs">
+                <div className="flex items-center space-x-2 text-rose-400 font-bold">
+                  <span>Simulation Error:</span>
+                </div>
+                <p className="text-rose-200">{simulationResult.error}</p>
               </div>
-              <p className="text-gray-300">
-                Executed <span className="text-emerald-300 font-bold">{simulationResult.toolCallsCount}</span> tool iterations. Identified{' '}
-                <span className="text-rose-400 font-bold">{simulationResult.findings?.length || 0}</span> code & security findings.
-              </p>
-            </div>
+            ) : (
+              <div className="p-4 rounded-xl bg-emerald-950/40 border border-emerald-800/80 space-y-2 font-mono text-xs">
+                <div className="flex items-center space-x-2 text-emerald-400 font-bold">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <span>Simulation Complete! Provider: [{simulationResult.providerUsed}]</span>
+                </div>
+                <p className="text-gray-300">
+                  Executed <span className="text-emerald-300 font-bold">{simulationResult.toolCallsCount}</span> tool iterations. Identified{' '}
+                  <span className="text-rose-400 font-bold">{simulationResult.findings?.length || 0}</span> code & security findings.
+                </p>
+              </div>
+            )
           )}
         </div>
 

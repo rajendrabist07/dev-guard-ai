@@ -4,11 +4,10 @@ import Link from 'next/link';
 import { ShieldAlert, Github, LayoutDashboard, Cpu } from 'lucide-react';
 
 export default function Navbar() {
+  const appSlug = process.env.NEXT_PUBLIC_GITHUB_APP_SLUG || 'dev-guard-ai';
   const githubAppInstallUrl =
     process.env.NEXT_PUBLIC_GITHUB_APP_INSTALL_URL ||
-    (process.env.NEXT_PUBLIC_GITHUB_APP_SLUG
-      ? `https://github.com/apps/${process.env.NEXT_PUBLIC_GITHUB_APP_SLUG}/installations/new`
-      : 'https://github.com/settings/apps/new');
+    `https://github.com/apps/${appSlug}/installations/new`;
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-gray-800/80 bg-[#0b0f19]/80 backdrop-blur-md">

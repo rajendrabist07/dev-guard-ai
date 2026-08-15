@@ -17,7 +17,6 @@ import {
   Plus,
   RefreshCw,
   ChevronRight,
-  BookOpen,
 } from 'lucide-react';
 
 export default function DashboardPage({ searchParams }: { searchParams: Promise<{ simulate?: string }> }) {
@@ -195,27 +194,15 @@ export default function DashboardPage({ searchParams }: { searchParams: Promise<
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-white tracking-tight">Monitored Repositories</h2>
-            {dashboardData?.installUrl ? (
-              <a
-                href={dashboardData.installUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs font-semibold flex items-center space-x-1 text-emerald-400 hover:text-emerald-300 transition-colors"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Install GitHub App on New Repo</span>
-              </a>
-            ) : (
-              <a
-                href="https://github.com/settings/apps/new"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs font-semibold flex items-center space-x-1 text-emerald-400 hover:text-emerald-300 transition-colors"
-              >
-                <BookOpen className="w-3.5 h-3.5" />
-                <span>Configure GitHub App</span>
-              </a>
-            )}
+            <a
+              href={dashboardData?.installUrl || `https://github.com/apps/${process.env.NEXT_PUBLIC_GITHUB_APP_SLUG || 'dev-guard-ai'}/installations/new`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs font-semibold flex items-center space-x-1 text-emerald-400 hover:text-emerald-300 transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Install GitHub App on New Repo</span>
+            </a>
           </div>
 
           {loading ? (
