@@ -64,7 +64,7 @@ GitHub webhooks require an HTTP 2xx response within **10 seconds**, otherwise Gi
 - **Zero Hallucination on Dependency Scans**: 100% of reported dependency vulnerabilities are backed by live advisory IDs from the open OSV.dev database.
 - **Actionable Developer Feedback**: All findings include valid GitHub markdown suggestion blocks, allowing developers to accept fixes in 1-click.
 - **Sub-30s Review Turnaround**: Full 3-tool execution and GitHub review posting completed in under 25 seconds on average.
-- **Zero-Config Developer Experience**: Interactive `/dashboard?simulate=true` sandbox allows evaluation without requiring repository access.
+- **Zero-Config Developer Experience**: Interactive `/try` sandbox allows evaluation without requiring repository access.
 
 ---
 

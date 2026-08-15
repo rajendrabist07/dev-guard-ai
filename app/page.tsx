@@ -62,11 +62,11 @@ export default function Home() {
             <ArrowRight className="w-4 h-4" />
           </Link>
           <Link
-            href="/dashboard?simulate=true"
+            href="/try"
             className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-gray-900 border border-gray-800 text-gray-200 font-semibold text-sm hover:border-gray-700 hover:bg-gray-800 transition-all flex items-center justify-center space-x-2"
           >
             <Cpu className="w-4 h-4 text-emerald-400" />
-            <span>Simulate PR Review Live</span>
+            <span>Try Agent Live</span>
           </Link>
         </div>
 

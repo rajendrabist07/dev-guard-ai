@@ -43,11 +43,11 @@ export default function Navbar() {
             <span className="hidden sm:inline">Install GitHub App</span>
           </a>
           <Link
-            href="/dashboard?simulate=true"
+            href="/try"
             className="flex items-center space-x-2 text-xs font-semibold px-3.5 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20 transition-all shadow-sm shadow-emerald-950"
           >
             <Cpu className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
-            <span>Test Agent Live</span>
+            <span>Try it Live</span>
           </Link>
         </nav>
       </div>

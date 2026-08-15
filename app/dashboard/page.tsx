@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState, use } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import ReviewDetailModal from '@/components/ReviewDetailModal';
 import SimulateReviewModal from '@/components/SimulateReviewModal';
@@ -21,6 +23,7 @@ import {
 } from 'lucide-react';
 
 export default function DashboardPage({ searchParams }: { searchParams: Promise<{ simulate?: string }> }) {
+  const router = useRouter();
   const resolvedSearchParams = use(searchParams);
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const repos = dashboardData?.repos ?? [];
@@ -63,11 +66,12 @@ export default function DashboardPage({ searchParams }: { searchParams: Promise<
   };
 
   useEffect(() => {
-    loadData();
     if (resolvedSearchParams?.simulate === 'true') {
-      setIsSimulateOpen(true);
+      router.replace('/try');
+      return;
     }
-  }, [resolvedSearchParams]);
+    loadData();
+  }, [resolvedSearchParams, router]);
 
   const handleOpenRunDetail = async (run: DisplayReviewRun) => {
     const res = await fetch(`/api/reviews/${run.id}`, { cache: 'no-store' });
@@ -141,13 +145,13 @@ export default function DashboardPage({ searchParams }: { searchParams: Promise<
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
-            <button
-              onClick={() => setIsSimulateOpen(true)}
+            <Link
+              href="/try"
               className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs shadow-lg shadow-emerald-500/20 transition-all focus:outline-none focus:ring-2 focus:ring-emerald-400"
             >
               <Play className="w-3.5 h-3.5 fill-black" />
-              <span>Simulate PR Review</span>
-            </button>
+              <span>Try Agent Live</span>
+            </Link>
           </div>
         </div>
 
@@ -303,7 +307,7 @@ export default function DashboardPage({ searchParams }: { searchParams: Promise<
                 <GitPullRequest className="w-8 h-8 text-gray-600 mx-auto" />
                 <div className="font-semibold text-gray-300">No review runs recorded yet</div>
                 <p className="text-gray-500 max-w-sm mx-auto">
-                  Create a pull request on your repository or click <strong>Simulate PR Review</strong> to test the agentic loop live!
+                  Create a pull request on your repository or click <strong>Try Agent Live</strong> to test the agentic loop live!
                 </p>
               </div>
             ) : (
