@@ -29,17 +29,8 @@ function requireSupabaseAdmin() {
   return supabaseAdmin;
 }
 
-export function getGitHubAppInstallUrl(): string | null {
-  const explicitUrl =
-    process.env.GITHUB_APP_INSTALL_URL ||
-    process.env.NEXT_PUBLIC_GITHUB_APP_INSTALL_URL;
-  if (explicitUrl) return explicitUrl;
-
-  const slug =
-    process.env.NEXT_PUBLIC_GITHUB_APP_SLUG ||
-    process.env.GITHUB_APP_SLUG;
-  return slug ? `https://github.com/apps/${slug}/installations/new` : null;
-}
+import { getGitHubAppInstallUrl } from '@/lib/github/config';
+export { getGitHubAppInstallUrl };
 
 export async function getRepos(): Promise<Repo[]> {
   try {

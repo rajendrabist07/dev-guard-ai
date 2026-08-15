@@ -5,6 +5,7 @@ import Navbar from '@/components/Navbar';
 import ReviewDetailModal from '@/components/ReviewDetailModal';
 import SimulateReviewModal from '@/components/SimulateReviewModal';
 import { DashboardData, DisplayReviewRun, Finding } from '@/lib/db/types';
+import { getGitHubAppInstallUrl } from '@/lib/github/config';
 import {
   ShieldAlert,
   GitPullRequest,
@@ -195,7 +196,7 @@ export default function DashboardPage({ searchParams }: { searchParams: Promise<
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-white tracking-tight">Monitored Repositories</h2>
             <a
-              href={dashboardData?.installUrl || `https://github.com/apps/${process.env.NEXT_PUBLIC_GITHUB_APP_SLUG || 'dev-guard-ai'}/installations/new`}
+              href={dashboardData?.installUrl || getGitHubAppInstallUrl()}
               target="_blank"
               rel="noopener noreferrer"
               className="text-xs font-semibold flex items-center space-x-1 text-emerald-400 hover:text-emerald-300 transition-colors"

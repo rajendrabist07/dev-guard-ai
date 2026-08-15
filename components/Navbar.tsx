@@ -2,12 +2,10 @@
 
 import Link from 'next/link';
 import { ShieldAlert, Github, LayoutDashboard, Cpu } from 'lucide-react';
+import { getGitHubAppInstallUrl } from '@/lib/github/config';
 
 export default function Navbar() {
-  const appSlug = process.env.NEXT_PUBLIC_GITHUB_APP_SLUG || 'dev-guard-ai';
-  const githubAppInstallUrl =
-    process.env.NEXT_PUBLIC_GITHUB_APP_INSTALL_URL ||
-    `https://github.com/apps/${appSlug}/installations/new`;
+  const installUrl = getGitHubAppInstallUrl();
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-gray-800/80 bg-[#0b0f19]/80 backdrop-blur-md">
@@ -35,7 +33,7 @@ export default function Navbar() {
             <span>Dashboard</span>
           </Link>
           <a
-            href={githubAppInstallUrl}
+            href={installUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center space-x-2 text-sm font-medium text-gray-300 hover:text-white transition-colors"
