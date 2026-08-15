@@ -8,6 +8,7 @@ import {
   NewReviewRun,
   Repo,
   ReviewStatus,
+  TryRun,
 } from './types';
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -20,6 +21,7 @@ export const supabaseAdmin = supabaseUrl && supabaseServiceKey ? createClient(su
 
 // In-memory simulation cache fallback to ensure simulation always resolves smoothly
 export const inMemorySimulations = new Map<string, { run: DisplayReviewRun; findings: Finding[] }>();
+export const inMemoryTryRuns = new Map<string, TryRun>();
 
 function requireSupabaseAdmin() {
   if (!supabaseAdmin) {
@@ -280,3 +282,187 @@ export async function saveFindings(findings: NewFinding[]): Promise<Finding[]> {
   if (error) throw new Error(`Failed to save findings: ${error.message}`);
   return (data ?? []) as Finding[];
 }
+
+export async function createTryRun(input: {
+  id?: string;
+  session_id?: string | null;
+  input_type: 'sample' | 'pasted';
+  input_snippet: string;
+  pr_title: string;
+  pr_author: string;
+  findings: Finding[];
+  agent_trace: AgentTraceStep[];
+  tool_calls_count: number;
+  summary?: string | null;
+  provider_used?: string | null;
+  status?: string;
+}): Promise<TryRun> {
+  const tryId = input.id || `try-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+  const now = new Date().toISOString();
+
+  const record: TryRun = {
+    id: tryId,
+    session_id: input.session_id || null,
+    input_type: input.input_type,
+    input_snippet: input.input_snippet.slice(0, 4000),
+    pr_title: input.pr_title,
+    pr_author: input.pr_author,
+    findings: input.findings,
+    agent_trace: input.agent_trace,
+    tool_calls_count: input.tool_calls_count,
+    summary: input.summary || null,
+    provider_used: input.provider_used || 'local-agent',
+    status: input.status || 'completed',
+    created_at: now,
+  };
+
+  // Cache in memory for instant retrieval
+  inMemoryTryRuns.set(tryId, record);
+
+  if (supabaseAdmin) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('try_runs')
+        .insert({
+          id: tryId.includes('-') && tryId.length >= 32 ? tryId : undefined,
+          session_id: record.session_id,
+          input_type: record.input_type,
+          input_snippet: record.input_snippet,
+          pr_title: record.pr_title,
+          pr_author: record.pr_author,
+          findings: record.findings,
+          agent_trace: record.agent_trace,
+          tool_calls_count: record.tool_calls_count,
+          summary: record.summary,
+          provider_used: record.provider_used,
+          status: record.status,
+        })
+        .select()
+        .maybeSingle();
+
+      if (error) {
+        console.warn('Supabase try_runs insert warning:', error.message);
+      } else if (data) {
+        const saved: TryRun = {
+          id: data.id,
+          session_id: data.session_id,
+          input_type: data.input_type,
+          input_snippet: data.input_snippet,
+          pr_title: data.pr_title,
+          pr_author: data.pr_author,
+          findings: data.findings || [],
+          agent_trace: data.agent_trace || [],
+          tool_calls_count: data.tool_calls_count || 0,
+          summary: data.summary,
+          provider_used: data.provider_used,
+          status: data.status,
+          created_at: data.created_at,
+        };
+        inMemoryTryRuns.set(saved.id, saved);
+        return saved;
+      }
+    } catch (dbErr) {
+      console.warn('Supabase try_runs persistence fallback to inMemory:', dbErr);
+    }
+  }
+
+  return record;
+}
+
+export async function getTryRunById(id: string): Promise<TryRun | null> {
+  // Check in-memory map first
+  if (inMemoryTryRuns.has(id)) {
+    return inMemoryTryRuns.get(id)!;
+  }
+
+  if (supabaseAdmin) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('try_runs')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
+
+      if (error) {
+        console.warn(`Failed to fetch try_run ${id}:`, error.message);
+      } else if (data) {
+        const run: TryRun = {
+          id: data.id,
+          session_id: data.session_id,
+          input_type: data.input_type,
+          input_snippet: data.input_snippet,
+          pr_title: data.pr_title,
+          pr_author: data.pr_author,
+          findings: data.findings || [],
+          agent_trace: data.agent_trace || [],
+          tool_calls_count: data.tool_calls_count || 0,
+          summary: data.summary,
+          provider_used: data.provider_used,
+          status: data.status,
+          created_at: data.created_at,
+        };
+        inMemoryTryRuns.set(run.id, run);
+        return run;
+      }
+    } catch (err) {
+      console.warn('getTryRunById fallback:', err);
+    }
+  }
+
+  return null;
+}
+
+export async function getTryRunsBySession(sessionId: string, limit = 20): Promise<TryRun[]> {
+  const matchingInMemory = Array.from(inMemoryTryRuns.values())
+    .filter((r) => r.session_id === sessionId)
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, limit);
+
+  if (supabaseAdmin) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('try_runs')
+        .select('*')
+        .eq('session_id', sessionId)
+        .order('created_at', { ascending: false })
+        .limit(limit);
+
+      if (error) {
+        console.warn('Failed to query try_runs by session:', error.message);
+        return matchingInMemory;
+      }
+
+      if (data && data.length > 0) {
+        const dbRuns: TryRun[] = data.map((d) => ({
+          id: d.id,
+          session_id: d.session_id,
+          input_type: d.input_type,
+          input_snippet: d.input_snippet,
+          pr_title: d.pr_title,
+          pr_author: d.pr_author,
+          findings: d.findings || [],
+          agent_trace: d.agent_trace || [],
+          tool_calls_count: d.tool_calls_count || 0,
+          summary: d.summary,
+          provider_used: d.provider_used,
+          status: d.status,
+          created_at: d.created_at,
+        }));
+
+        // Merge with in-memory if any
+        const map = new Map<string, TryRun>();
+        dbRuns.forEach((r) => map.set(r.id, r));
+        matchingInMemory.forEach((r) => map.set(r.id, r));
+
+        return Array.from(map.values()).sort(
+          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+      }
+    } catch (err) {
+      console.warn('getTryRunsBySession fallback:', err);
+    }
+  }
+
+  return matchingInMemory;
+}
+

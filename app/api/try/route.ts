@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { runAgentOrchestrator, ProgressUpdate } from '@/lib/agent/orchestrator';
 import {
   createReviewRun,
+  createTryRun,
   ensureRepoForInstallation,
   inMemorySimulations,
   saveFindings,
@@ -20,9 +21,11 @@ export async function POST(req: NextRequest) {
       prAuthor?: string;
       diff?: string;
       fileNames?: string[];
+      sessionId?: string;
+      inputType?: 'sample' | 'pasted';
     };
 
-    const { prTitle, prAuthor, diff, fileNames } = body;
+    const { prTitle, prAuthor, diff, fileNames, sessionId, inputType } = body;
 
     const sampleDiff =
       diff ||
@@ -45,10 +48,10 @@ export async function POST(req: NextRequest) {
         ? fileNames
         : ['app/api/checkout/route.ts', 'package.json'];
 
-    const generatedRunId = `try-run-${Date.now()}`;
+    const generatedRunId = `try-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const prNumber = Math.floor(Math.random() * 90) + 10;
-    const title = prTitle || 'feat: interactive playground review';
-    const author = prAuthor || 'try-user';
+    const title = prTitle || (inputType === 'sample' ? 'Sample Buggy File Review' : 'Custom Code Snippet Review');
+    const author = prAuthor || 'visitor';
     const commitSha = Math.random().toString(36).substring(2, 10);
 
     const isStream = req.headers.get('accept')?.includes('text/event-stream') || true;
@@ -98,7 +101,7 @@ export async function POST(req: NextRequest) {
             }
           }
 
-          const reviewRunId = dbRun?.id || generatedRunId;
+          const reviewRunId = generatedRunId;
 
           // Call real orchestrator with live progress streaming
           const result = await runAgentOrchestrator(
@@ -113,8 +116,8 @@ export async function POST(req: NextRequest) {
                 message: progress.message,
                 tool: progress.tool,
               });
-              // Brief micro-delay so UI transitions look crystal clear
-              await new Promise((resolve) => setTimeout(resolve, 350));
+              // Brief micro-delay so UI transitions look clear
+              await new Promise((resolve) => setTimeout(resolve, 300));
             }
           );
 
@@ -167,9 +170,27 @@ export async function POST(req: NextRequest) {
             findings: savedFindings,
           });
 
+          // Create TryRun history record in Supabase & memory
+          const tryRunRecord = await createTryRun({
+            id: reviewRunId,
+            session_id: sessionId || null,
+            input_type: inputType || 'sample',
+            input_snippet: sampleDiff,
+            pr_title: title,
+            pr_author: author,
+            findings: savedFindings,
+            agent_trace: result.trace,
+            tool_calls_count: result.toolCallsCount,
+            summary: result.summary,
+            provider_used: result.providerUsed,
+            status: 'completed',
+          });
+
           await sendEvent({
             type: 'complete',
-            reviewRunId,
+            reviewRunId: tryRunRecord.id,
+            shareUrl: `/try/result/${tryRunRecord.id}`,
+            run: tryRunRecord,
             status: 'completed',
             toolCallsCount: result.toolCallsCount,
             trace: result.trace,
@@ -183,7 +204,7 @@ export async function POST(req: NextRequest) {
           const errorMsg =
             err instanceof Error
               ? err.name === 'AbortError'
-                ? 'Review execution timed out after 30 seconds. Please try again.'
+                ? 'This is taking longer than expected, please try again.'
                 : err.message
               : 'Agent execution encountered an error.';
           await sendEvent({
@@ -210,14 +231,35 @@ export async function POST(req: NextRequest) {
 
     // Standard JSON Fallback
     const result = await runAgentOrchestrator(sampleDiff, targetFiles, generatedRunId);
+    const tryRunRecord = await createTryRun({
+      id: generatedRunId,
+      session_id: sessionId || null,
+      input_type: inputType || 'sample',
+      input_snippet: sampleDiff,
+      pr_title: title,
+      pr_author: author,
+      findings: result.findings.map((f, i) => ({
+        ...f,
+        id: `find-try-${Date.now()}-${i}`,
+        created_at: new Date().toISOString(),
+      })),
+      agent_trace: result.trace,
+      tool_calls_count: result.toolCallsCount,
+      summary: result.summary,
+      provider_used: result.providerUsed,
+      status: 'completed',
+    });
+
     return NextResponse.json({
       success: true,
-      reviewRunId: generatedRunId,
+      reviewRunId: tryRunRecord.id,
+      shareUrl: `/try/result/${tryRunRecord.id}`,
+      run: tryRunRecord,
       status: 'completed',
       toolCallsCount: result.toolCallsCount,
       trace: result.trace,
       summary: result.summary,
-      findings: result.findings,
+      findings: tryRunRecord.findings,
       providerUsed: result.providerUsed,
     });
   } catch (err: unknown) {

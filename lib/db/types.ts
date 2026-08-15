@@ -52,6 +52,22 @@ export interface AgentTraceStep {
   timestamp: string;
 }
 
+export interface TryRun {
+  id: string;
+  session_id: string | null;
+  input_type: 'sample' | 'pasted';
+  input_snippet: string;
+  pr_title: string;
+  pr_author: string;
+  findings: Finding[];
+  agent_trace: AgentTraceStep[];
+  tool_calls_count: number;
+  summary: string | null;
+  provider_used: string | null;
+  status: string;
+  created_at: string;
+}
+
 export type DisplayReviewRun = ReviewRun;
 
 export type NewReviewRun = Pick<ReviewRun, 'repo_id' | 'pr_number' | 'commit_sha' | 'status'> &

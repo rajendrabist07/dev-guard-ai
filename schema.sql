@@ -47,9 +47,28 @@ create table if not exists findings (
   created_at timestamptz not null default now()
 );
 
+create table if not exists try_runs (
+  id uuid primary key default gen_random_uuid(),
+  session_id text,
+  input_type text not null check (input_type in ('sample', 'pasted')),
+  input_snippet text not null,
+  pr_title text,
+  pr_author text,
+  findings jsonb not null default '[]'::jsonb,
+  agent_trace jsonb not null default '[]'::jsonb,
+  tool_calls_count int not null default 0,
+  summary text,
+  provider_used text,
+  status text not null default 'completed',
+  created_at timestamptz not null default now()
+);
+
 create index if not exists idx_repos_installation_id on repos(installation_id);
 create index if not exists idx_repos_full_name on repos(full_name);
 create index if not exists idx_review_runs_repo_id on review_runs(repo_id);
 create index if not exists idx_review_runs_status on review_runs(status);
 create index if not exists idx_findings_review_run_id on findings(review_run_id);
 create index if not exists idx_findings_severity on findings(severity);
+create index if not exists idx_try_runs_session_id on try_runs(session_id);
+create index if not exists idx_try_runs_created_at on try_runs(created_at desc);
+
