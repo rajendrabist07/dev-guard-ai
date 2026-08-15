@@ -77,14 +77,37 @@ export default function DashboardPage({ searchParams }: { searchParams: Promise<
     setSelectedFindings(findings);
   };
 
-  const handleSimulationFinished = async (newRunId: string) => {
-    await loadData();
-    const res = await fetch(`/api/reviews/${newRunId}`, { cache: 'no-store' });
-    const { run, findings } = (await res.json()) as { run: DisplayReviewRun | null; findings: Finding[] };
-    if (run) {
-      setSelectedRun(run);
-      setSelectedFindings(findings);
+  const handleSimulationFinished = async (
+    newRunId: string,
+    directFindings?: Finding[],
+    directRun?: DisplayReviewRun
+  ) => {
+    setIsSimulateOpen(false);
+    if (directRun && directFindings) {
+      setSelectedRun(directRun);
+      setSelectedFindings(directFindings);
+      setDashboardData((prev) => {
+        if (!prev) return null;
+        const exists = prev.reviewRuns.some((r) => r.id === directRun.id);
+        if (exists) return prev;
+        return {
+          ...prev,
+          reviewRuns: [directRun, ...prev.reviewRuns],
+        };
+      });
+    } else {
+      try {
+        const res = await fetch(`/api/reviews/${newRunId}`, { cache: 'no-store' });
+        const { run, findings } = (await res.json()) as { run: DisplayReviewRun | null; findings: Finding[] };
+        if (run) {
+          setSelectedRun(run);
+          setSelectedFindings(findings ?? []);
+        }
+      } catch (e) {
+        console.warn('Could not load review detail:', e);
+      }
     }
+    loadData();
   };
 
   const filteredRuns = reviewRuns.filter(
@@ -346,6 +369,7 @@ export default function DashboardPage({ searchParams }: { searchParams: Promise<
       {/* Simulation Modal */}
       {isSimulateOpen && (
         <SimulateReviewModal
+          autoRun={resolvedSearchParams?.simulate === 'true'}
           onClose={() => setIsSimulateOpen(false)}
           onSimulationComplete={handleSimulationFinished}
         />
