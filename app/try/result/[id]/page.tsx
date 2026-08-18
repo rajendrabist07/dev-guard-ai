@@ -21,6 +21,7 @@ import {
   FileCode,
 } from 'lucide-react';
 import { TryRun, Severity } from '@/lib/db/types';
+import ExportReportMenu from '@/components/ExportReportMenu';
 
 export default function TryResultPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -188,10 +189,40 @@ export default function TryResultPage({ params }: { params: Promise<{ id: string
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 self-start sm:self-center">
+                <div className="flex items-center gap-2.5 self-start sm:self-center flex-wrap">
+                  <ExportReportMenu
+                    reportData={{
+                      title: run.pr_title,
+                      author: run.pr_author,
+                      timestamp: run.created_at,
+                      status: run.status,
+                      reviewType: run.input_type === 'sample' ? 'Sample Playground Preset' : 'Custom Pasted Code',
+                      toolCallsCount: run.tool_calls_count,
+                      providerUsed: run.provider_used || 'DevGuard Local Orchestrator',
+                      summary: run.summary || undefined,
+                      findings: run.findings,
+                    }}
+                    size="sm"
+                  />
+                  <button
+                    onClick={copyShareLink}
+                    className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700 text-xs font-semibold transition-all"
+                  >
+                    {shareCopied ? (
+                      <>
+                        <CheckCheck className="w-3.5 h-3.5 text-emerald-400" />
+                        <span className="text-emerald-300">Link Copied!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Share2 className="w-3.5 h-3.5 text-cyan-400" />
+                        <span>Share Result</span>
+                      </>
+                    )}
+                  </button>
                   <Link
                     href="/try"
-                    className="px-4 py-2 text-xs font-bold text-black bg-emerald-500 hover:bg-emerald-400 rounded-xl transition-all shadow-md shadow-emerald-500/20"
+                    className="px-3.5 py-1.5 text-xs font-bold text-black bg-emerald-500 hover:bg-emerald-400 rounded-xl transition-all shadow-md shadow-emerald-500/20"
                   >
                     Test Your Own Code
                   </Link>

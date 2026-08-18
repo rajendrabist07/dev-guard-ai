@@ -28,6 +28,7 @@ import {
   Lock,
 } from 'lucide-react';
 import { AgentTraceStep, Finding, Severity, TryRun } from '@/lib/db/types';
+import ExportReportMenu from '@/components/ExportReportMenu';
 
 interface SampleFixture {
   id: string;
@@ -91,6 +92,7 @@ interface ReviewResult {
   findings: Finding[];
   summary?: string;
   shareUrl?: string;
+  status?: string;
 }
 
 export default function TryPage() {
@@ -641,10 +643,24 @@ export default function TryPage() {
                   </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-3">
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <ExportReportMenu
+                    reportData={{
+                      title: activeMode === 'sample' ? selectedSample.name : 'Custom Code Snippet',
+                      author: activeMode === 'sample' ? selectedSample.prAuthor : 'Local User',
+                      timestamp: new Date().toISOString(),
+                      status: result.status,
+                      reviewType: activeMode === 'sample' ? 'Sample Playground Preset' : 'Custom Pasted Code',
+                      toolCallsCount: result.toolCallsCount,
+                      providerUsed: result.providerUsed || 'DevGuard Local Orchestrator',
+                      summary: result.summary || undefined,
+                      findings: result.findings,
+                    }}
+                    size="sm"
+                  />
                   <button
                     onClick={() => copyShareLink(result.reviewRunId)}
-                    className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 hover:bg-emerald-500/20 text-emerald-300 text-xs font-semibold transition-all shadow-sm shadow-emerald-950"
+                    className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 hover:bg-emerald-500/20 text-emerald-300 text-xs font-semibold transition-all shadow-sm shadow-emerald-950"
                   >
                     {shareCopied ? (
                       <>
@@ -661,14 +677,14 @@ export default function TryPage() {
                   <Link
                     href={`/try/result/${result.reviewRunId}`}
                     target="_blank"
-                    className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold transition-colors"
+                    className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold transition-colors"
                   >
                     <ExternalLink className="w-3.5 h-3.5" />
                     <span>Open Shareable View</span>
                   </Link>
                   <button
                     onClick={() => runReview(activeMode === 'sample')}
-                    className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold transition-colors"
+                    className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold transition-colors"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
                     <span>Re-run</span>

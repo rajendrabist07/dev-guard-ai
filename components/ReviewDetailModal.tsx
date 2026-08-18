@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { DisplayReviewRun, Finding } from '@/lib/db/types';
+import ExportReportMenu from '@/components/ExportReportMenu';
 import { X, ShieldAlert, AlertTriangle, Info, Terminal, CheckCircle2, Copy, Check, Cpu, Code2 } from 'lucide-react';
 
 interface ReviewDetailModalProps {
@@ -64,12 +65,27 @@ export default function ReviewDetailModal({ run, findings, onClose }: ReviewDeta
               Author: <span className="text-emerald-400 font-semibold">{run.pr_author ?? 'unknown'}</span> - Commit: {run.commit_sha.substring(0, 7)}
             </p>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center space-x-3">
+            <ExportReportMenu
+              reportData={{
+                title: run.pr_title ?? `PR #${run.pr_number}`,
+                prNumber: run.pr_number,
+                author: run.pr_author ?? 'unknown',
+                commitSha: run.commit_sha,
+                timestamp: run.completed_at || run.created_at,
+                status: run.status,
+                toolCallsCount: run.tool_calls_count,
+                findings,
+              }}
+              size="sm"
+            />
+            <button
+              onClick={onClose}
+              className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Tab Navigation */}
