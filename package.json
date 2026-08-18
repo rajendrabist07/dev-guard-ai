@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "test:consistency": "npx tsx scripts/verify-data-consistency.ts",
     "test:reports": "npx tsx scripts/verify-export-reports.ts",
-    "test:transparency": "npx tsx scripts/verify-model-transparency.ts"
+    "test:transparency": "npx tsx scripts/verify-model-transparency.ts",
+    "test:badge": "npx tsx scripts/verify-badge-api.ts"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

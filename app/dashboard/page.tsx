@@ -7,6 +7,7 @@ import ReviewDetailModal from '@/components/ReviewDetailModal';
 import { DashboardData, DisplayReviewRun, Finding } from '@/lib/db/types';
 import { NEXT_PUBLIC_GITHUB_APP_INSTALL_URL, getGitHubAppInstallUrl } from '@/lib/github/config';
 import AnalyticsSection from '@/components/AnalyticsSection';
+import BadgeGeneratorSection from '@/components/BadgeGeneratorSection';
 import {
   ShieldAlert,
   GitPullRequest,
@@ -245,14 +246,19 @@ export default function DashboardPage() {
                       </div>
                     </div>
                   </div>
-                  <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
-                    Active
-                  </span>
+                  <div className="flex items-center space-x-2">
+                    <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
+                      Active
+                    </span>
+                  </div>
                 </div>
               ))}
             </div>
           )}
         </div>
+
+        {/* Public README Badge Generator Section */}
+        <BadgeGeneratorSection repos={repos} />
 
         {/* Review Runs History Table */}
         <div className="space-y-4">
