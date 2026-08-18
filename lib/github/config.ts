@@ -3,6 +3,12 @@
  */
 
 export const DEFAULT_GITHUB_APP_SLUG = 'devguard-agent';
+export const CANONICAL_GITHUB_APP_INSTALL_URL = `https://github.com/apps/${DEFAULT_GITHUB_APP_SLUG}/installations/new`;
+
+export const NEXT_PUBLIC_GITHUB_APP_INSTALL_URL =
+  process.env.NEXT_PUBLIC_GITHUB_APP_INSTALL_URL ||
+  process.env.GITHUB_APP_INSTALL_URL ||
+  CANONICAL_GITHUB_APP_INSTALL_URL;
 
 /**
  * Returns the configured GitHub App slug from environment variables,
@@ -24,14 +30,9 @@ export function getGitHubAppSlug(): string {
  * Works consistently across both Client Components and Server Components.
  */
 export function getGitHubAppInstallUrl(): string {
-  const explicitUrl =
+  return (
     process.env.NEXT_PUBLIC_GITHUB_APP_INSTALL_URL ||
-    process.env.GITHUB_APP_INSTALL_URL;
-
-  if (explicitUrl) {
-    return explicitUrl;
-  }
-
-  const slug = getGitHubAppSlug();
-  return `https://github.com/apps/${slug}/installations/new`;
+    process.env.GITHUB_APP_INSTALL_URL ||
+    `https://github.com/apps/${getGitHubAppSlug()}/installations/new`
+  );
 }

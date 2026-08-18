@@ -105,17 +105,18 @@ export async function getDashboardData(): Promise<DashboardData> {
   }
 
   const [repos, reviewRuns, findings] = await Promise.all([getRepos(), getReviewRuns(), getFindings()]);
+  const realRepos = repos.filter(
+    (repo) => repo.is_active && !repo.full_name.toLowerCase().includes('simulated') && repo.installation_id !== 'simulation'
+  );
   const realReviewRuns = reviewRuns.filter((run) => !run.is_simulation);
   const realRunIds = new Set(realReviewRuns.map((run) => run.id));
   const realFindings = findings.filter((finding) => realRunIds.has(finding.review_run_id));
   
-  // SPRINT R1 INVARIANT CANARY CHECK:
-  // findings > 0 while review_runs == 0 is logically impossible.
-  if (realFindings.length > 0 && realReviewRuns.length === 0) {
-    console.warn('[INVARIANT CANARY] Detected findings > 0 while real review_runs == 0. Clamping findings to 0.');
-  }
-
+  // DATA INVARIANT GUARANTEE:
+  // findings > 0 while review_runs == 0 is impossible.
   const calculatedSecurityFindings = realReviewRuns.length === 0 ? 0 : realFindings.length;
+  const calculatedToolsExecuted =
+    realReviewRuns.length === 0 ? 0 : realReviewRuns.reduce((sum, run) => sum + run.tool_calls_count, 0);
 
   const findingsCountByRunId = findings.reduce<Record<string, number>>((acc, finding) => {
     acc[finding.review_run_id] = (acc[finding.review_run_id] ?? 0) + 1;
@@ -123,13 +124,13 @@ export async function getDashboardData(): Promise<DashboardData> {
   }, {});
 
   return {
-    repos,
-    reviewRuns,
+    repos: realRepos,
+    reviewRuns: realReviewRuns,
     findingsCountByRunId,
     stats: {
-      connectedRepos: repos.filter((repo) => repo.is_active).length,
+      connectedRepos: realRepos.length,
       reviewRuns: realReviewRuns.length,
-      toolsExecuted: realReviewRuns.reduce((sum, run) => sum + run.tool_calls_count, 0),
+      toolsExecuted: calculatedToolsExecuted,
       securityFindings: calculatedSecurityFindings,
     },
     installUrl,

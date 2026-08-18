@@ -1,13 +1,11 @@
 'use client';
 
-import { useEffect, useState, use } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import ReviewDetailModal from '@/components/ReviewDetailModal';
-import SimulateReviewModal from '@/components/SimulateReviewModal';
 import { DashboardData, DisplayReviewRun, Finding } from '@/lib/db/types';
-import { getGitHubAppInstallUrl } from '@/lib/github/config';
+import { NEXT_PUBLIC_GITHUB_APP_INSTALL_URL, getGitHubAppInstallUrl } from '@/lib/github/config';
 import {
   ShieldAlert,
   GitPullRequest,
@@ -22,9 +20,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 
-export default function DashboardPage({ searchParams }: { searchParams: Promise<{ simulate?: string }> }) {
-  const router = useRouter();
-  const resolvedSearchParams = use(searchParams);
+export default function DashboardPage() {
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const repos = dashboardData?.repos ?? [];
   const reviewRuns = dashboardData?.reviewRuns ?? [];
@@ -40,9 +36,6 @@ export default function DashboardPage({ searchParams }: { searchParams: Promise<
   // Selected run for detail view
   const [selectedRun, setSelectedRun] = useState<DisplayReviewRun | null>(null);
   const [selectedFindings, setSelectedFindings] = useState<Finding[]>([]);
-
-  // Simulation modal
-  const [isSimulateOpen, setIsSimulateOpen] = useState(false);
 
   // Search & Filter
   const [searchTerm, setSearchTerm] = useState('');
@@ -66,12 +59,8 @@ export default function DashboardPage({ searchParams }: { searchParams: Promise<
   };
 
   useEffect(() => {
-    if (resolvedSearchParams?.simulate === 'true') {
-      router.replace('/try');
-      return;
-    }
     loadData();
-  }, [resolvedSearchParams, router]);
+  }, []);
 
   const handleOpenRunDetail = async (run: DisplayReviewRun) => {
     const res = await fetch(`/api/reviews/${run.id}`, { cache: 'no-store' });
@@ -79,39 +68,6 @@ export default function DashboardPage({ searchParams }: { searchParams: Promise<
     const findings = data.findings ?? [];
     setSelectedRun(run);
     setSelectedFindings(findings);
-  };
-
-  const handleSimulationFinished = async (
-    newRunId: string,
-    directFindings?: Finding[],
-    directRun?: DisplayReviewRun
-  ) => {
-    setIsSimulateOpen(false);
-    if (directRun && directFindings) {
-      setSelectedRun(directRun);
-      setSelectedFindings(directFindings);
-      setDashboardData((prev) => {
-        if (!prev) return null;
-        const exists = prev.reviewRuns.some((r) => r.id === directRun.id);
-        if (exists) return prev;
-        return {
-          ...prev,
-          reviewRuns: [directRun, ...prev.reviewRuns],
-        };
-      });
-    } else {
-      try {
-        const res = await fetch(`/api/reviews/${newRunId}`, { cache: 'no-store' });
-        const { run, findings } = (await res.json()) as { run: DisplayReviewRun | null; findings: Finding[] };
-        if (run) {
-          setSelectedRun(run);
-          setSelectedFindings(findings ?? []);
-        }
-      } catch (e) {
-        console.warn('Could not load review detail:', e);
-      }
-    }
-    loadData();
   };
 
   const filteredRuns = reviewRuns.filter(
@@ -223,7 +179,7 @@ export default function DashboardPage({ searchParams }: { searchParams: Promise<
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-white tracking-tight">Monitored Repositories</h2>
             <a
-              href={dashboardData?.installUrl || getGitHubAppInstallUrl()}
+              href={dashboardData?.installUrl || NEXT_PUBLIC_GITHUB_APP_INSTALL_URL || getGitHubAppInstallUrl()}
               target="_blank"
               rel="noopener noreferrer"
               className="text-xs font-semibold flex items-center space-x-1 text-emerald-400 hover:text-emerald-300 transition-colors"
@@ -243,7 +199,7 @@ export default function DashboardPage({ searchParams }: { searchParams: Promise<
               <Github className="w-10 h-10 text-gray-600 mx-auto mb-2" />
               <div className="font-semibold text-gray-300">No repositories connected yet</div>
               <p className="text-xs text-gray-500 max-w-md mx-auto">
-                Install your GitHub App on a repository or run an interactive simulation below to test the autonomous review loop.
+                Install your GitHub App on a repository or click <strong>Try Agent Live</strong> to test the autonomous review loop.
               </p>
             </div>
           ) : (
@@ -336,12 +292,6 @@ export default function DashboardPage({ searchParams }: { searchParams: Promise<
                           <span>Commit: {run.commit_sha.substring(0, 7)}</span>
                           <span>•</span>
                           <span className="text-cyan-400">{run.tool_calls_count} Tool Iterations</span>
-                          {run.is_simulation && (
-                            <>
-                              <span>•</span>
-                              <span className="text-amber-300">Simulated Run</span>
-                            </>
-                          )}
                         </div>
                       </div>
                     </div>
@@ -367,15 +317,6 @@ export default function DashboardPage({ searchParams }: { searchParams: Promise<
           run={selectedRun}
           findings={selectedFindings}
           onClose={() => setSelectedRun(null)}
-        />
-      )}
-
-      {/* Simulation Modal */}
-      {isSimulateOpen && (
-        <SimulateReviewModal
-          autoRun={resolvedSearchParams?.simulate === 'true'}
-          onClose={() => setIsSimulateOpen(false)}
-          onSimulationComplete={handleSimulationFinished}
         />
       )}
     </div>
