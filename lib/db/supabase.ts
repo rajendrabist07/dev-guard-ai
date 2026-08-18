@@ -1,13 +1,16 @@
 import { createClient } from '@supabase/supabase-js';
 import {
   AgentTraceStep,
+  AnalyticsData,
   DashboardData,
   DisplayReviewRun,
   Finding,
+  FindingsTimelinePoint,
   NewFinding,
   NewReviewRun,
   Repo,
   ReviewStatus,
+  ToolSourceBreakdown,
   TryRun,
 } from './types';
 
@@ -85,6 +88,14 @@ export async function getFindings(): Promise<Finding[]> {
 export async function getDashboardData(): Promise<DashboardData> {
   const installUrl = getGitHubAppInstallUrl();
 
+  const emptyAnalytics: AnalyticsData = {
+    timeline: [],
+    toolSources: [],
+    avgReviewTimeSeconds: null,
+    hasEnoughData: false,
+    totalFindingsAnalyzed: 0,
+  };
+
   if (!supabaseAdmin) {
     return {
       repos: [],
@@ -95,7 +106,9 @@ export async function getDashboardData(): Promise<DashboardData> {
         reviewRuns: 0,
         toolsExecuted: 0,
         securityFindings: 0,
+        avgReviewTimeSeconds: null,
       },
+      analytics: emptyAnalytics,
       installUrl,
       config: {
         hasSupabase: false,
@@ -123,6 +136,100 @@ export async function getDashboardData(): Promise<DashboardData> {
     return acc;
   }, {});
 
+  // 1. Calculate Average Review Time in seconds (completed_at - started_at / created_at)
+  let totalDurationMs = 0;
+  let timedRunsCount = 0;
+  for (const run of realReviewRuns) {
+    if (run.completed_at && (run.started_at || run.created_at)) {
+      const start = new Date(run.started_at || run.created_at).getTime();
+      const end = new Date(run.completed_at).getTime();
+      const durationMs = end - start;
+      if (durationMs > 0 && durationMs < 600000) { // filter outliers > 10m
+        totalDurationMs += durationMs;
+        timedRunsCount++;
+      }
+    }
+  }
+  const avgReviewTimeSeconds =
+    timedRunsCount > 0 ? Number((totalDurationMs / timedRunsCount / 1000).toFixed(1)) : null;
+
+  // 2. Build Timeline (Findings per review run over last 30 days)
+  const timelineMap = new Map<string, { critical: number; warning: number; info: number; total: number; date: string }>();
+  for (const run of realReviewRuns) {
+    const dateStr = run.created_at ? new Date(run.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Recent';
+    const runFindings = realFindings.filter((f) => f.review_run_id === run.id);
+    const critical = runFindings.filter((f) => f.severity === 'critical').length;
+    const warning = runFindings.filter((f) => f.severity === 'warning').length;
+    const info = runFindings.filter((f) => f.severity === 'info').length;
+
+    const existing = timelineMap.get(dateStr) || { critical: 0, warning: 0, info: 0, total: 0, date: dateStr };
+    existing.critical += critical;
+    existing.warning += warning;
+    existing.info += info;
+    existing.total += runFindings.length;
+    timelineMap.set(dateStr, existing);
+  }
+
+  const timeline: FindingsTimelinePoint[] = Array.from(timelineMap.entries()).map(([dateStr, entry]) => ({
+    date: dateStr,
+    runLabel: dateStr,
+    critical: entry.critical,
+    warning: entry.warning,
+    info: entry.info,
+    total: entry.total,
+  }));
+
+  // 3. Build Tool Source Breakdown (AST Linter vs OSV CVE Scanner vs Test Suite)
+  let linterCount = 0;
+  let depsCount = 0;
+  let testCount = 0;
+
+  for (const f of realFindings) {
+    const src = (f.tool_source || '').toLowerCase();
+    if (src.includes('lint') || src.includes('ast') || src.includes('eslint')) {
+      linterCount++;
+    } else if (src.includes('dep') || src.includes('scan') || src.includes('cve') || src.includes('osv')) {
+      depsCount++;
+    } else if (src.includes('test') || src.includes('jest') || src.includes('vitest')) {
+      testCount++;
+    }
+  }
+
+  const totalToolFindings = realFindings.length;
+  const toolSources: ToolSourceBreakdown[] = totalToolFindings > 0
+    ? [
+        {
+          tool: 'runLinter',
+          name: 'AST Linter (Static Analysis)',
+          count: linterCount,
+          percentage: Math.round((linterCount / totalToolFindings) * 100),
+          color: '#10b981', // emerald-500
+        },
+        {
+          tool: 'scanDependencies',
+          name: 'OSV.dev CVE Scanner',
+          count: depsCount,
+          percentage: Math.round((depsCount / totalToolFindings) * 100),
+          color: '#06b6d4', // cyan-500
+        },
+        {
+          tool: 'runTests',
+          name: 'Automated Test Suite',
+          count: testCount,
+          percentage: Math.round((testCount / totalToolFindings) * 100),
+          color: '#f59e0b', // amber-500
+        },
+      ].filter((t) => t.count > 0 || totalToolFindings === 0)
+    : [];
+
+  const analytics: AnalyticsData = {
+    timeline,
+    toolSources,
+    avgReviewTimeSeconds,
+    hasEnoughData: realReviewRuns.length >= 1,
+    totalFindingsAnalyzed: totalToolFindings,
+  };
+
   return {
     repos: realRepos,
     reviewRuns: realReviewRuns,
@@ -132,7 +239,9 @@ export async function getDashboardData(): Promise<DashboardData> {
       reviewRuns: realReviewRuns.length,
       toolsExecuted: calculatedToolsExecuted,
       securityFindings: calculatedSecurityFindings,
+      avgReviewTimeSeconds,
     },
+    analytics,
     installUrl,
     config: {
       hasSupabase: true,

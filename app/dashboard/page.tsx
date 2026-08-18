@@ -6,6 +6,7 @@ import Navbar from '@/components/Navbar';
 import ReviewDetailModal from '@/components/ReviewDetailModal';
 import { DashboardData, DisplayReviewRun, Finding } from '@/lib/db/types';
 import { NEXT_PUBLIC_GITHUB_APP_INSTALL_URL, getGitHubAppInstallUrl } from '@/lib/github/config';
+import AnalyticsSection from '@/components/AnalyticsSection';
 import {
   ShieldAlert,
   GitPullRequest,
@@ -18,17 +19,20 @@ import {
   Plus,
   RefreshCw,
   ChevronRight,
+  Clock,
 } from 'lucide-react';
 
 export default function DashboardPage() {
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const repos = dashboardData?.repos ?? [];
   const reviewRuns = dashboardData?.reviewRuns ?? [];
+  const analytics = dashboardData?.analytics;
   const stats = dashboardData?.stats ?? {
     connectedRepos: 0,
     reviewRuns: 0,
     toolsExecuted: 0,
     securityFindings: 0,
+    avgReviewTimeSeconds: null,
   };
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -112,10 +116,10 @@ export default function DashboardPage() {
         </div>
 
         {/* Overview Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           <div className="p-5 rounded-2xl bg-gray-900/50 border border-gray-800/80 space-y-2">
             <div className="flex items-center justify-between text-xs text-gray-400 font-medium">
-              <span>Connected Repositories</span>
+              <span>Connected Repos</span>
               <Github className="w-4 h-4 text-emerald-400" />
             </div>
             {loading ? (
@@ -124,7 +128,7 @@ export default function DashboardPage() {
               <div className="text-2xl font-extrabold text-white">{stats.connectedRepos}</div>
             )}
             <div className="text-[11px] text-emerald-400 font-mono flex items-center gap-1">
-              <CheckCircle2 className="w-3 h-3" /> Active Webhook Subscriptions
+              <CheckCircle2 className="w-3 h-3" /> Webhooks Active
             </div>
           </div>
 
@@ -138,7 +142,7 @@ export default function DashboardPage() {
             ) : (
               <div className="text-2xl font-extrabold text-white">{stats.reviewRuns}</div>
             )}
-            <div className="text-[11px] text-teal-400 font-mono">Total pull requests reviewed</div>
+            <div className="text-[11px] text-teal-400 font-mono">PRs reviewed</div>
           </div>
 
           <div className="p-5 rounded-2xl bg-gray-900/50 border border-gray-800/80 space-y-2">
@@ -151,7 +155,7 @@ export default function DashboardPage() {
             ) : (
               <div className="text-2xl font-extrabold text-white">{stats.toolsExecuted}</div>
             )}
-            <div className="text-[11px] text-cyan-400 font-mono">Empirical AST, CVE & test executions</div>
+            <div className="text-[11px] text-cyan-400 font-mono">AST, CVE & test runs</div>
           </div>
 
           <div className="p-5 rounded-2xl bg-gray-900/50 border border-gray-800/80 space-y-2">
@@ -164,7 +168,22 @@ export default function DashboardPage() {
             ) : (
               <div className="text-2xl font-extrabold text-white">{stats.securityFindings}</div>
             )}
-            <div className="text-[11px] text-rose-400 font-mono">Critical & warning advisories</div>
+            <div className="text-[11px] text-rose-400 font-mono">Verified advisories</div>
+          </div>
+
+          <div className="p-5 rounded-2xl bg-gray-900/50 border border-gray-800/80 space-y-2">
+            <div className="flex items-center justify-between text-xs text-gray-400 font-medium">
+              <span>Avg Review Time</span>
+              <Clock className="w-4 h-4 text-amber-400" />
+            </div>
+            {loading ? (
+              <div className="h-8 w-16 bg-gray-800/80 animate-pulse rounded-lg my-1" />
+            ) : (
+              <div className="text-2xl font-extrabold text-white">
+                {stats.avgReviewTimeSeconds !== null ? `${stats.avgReviewTimeSeconds}s` : '—'}
+              </div>
+            )}
+            <div className="text-[11px] text-amber-400 font-mono">Webhook to PR comment</div>
           </div>
         </div>
 
@@ -173,6 +192,9 @@ export default function DashboardPage() {
             {loadError}
           </div>
         )}
+
+        {/* Visual Intelligence: Findings Analytics & Trends */}
+        <AnalyticsSection analytics={analytics} loading={loading} />
 
         {/* Repositories Section */}
         <div className="space-y-4">

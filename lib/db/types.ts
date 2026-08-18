@@ -92,6 +92,32 @@ export interface DashboardStats {
   reviewRuns: number;
   toolsExecuted: number;
   securityFindings: number;
+  avgReviewTimeSeconds: number | null;
+}
+
+export interface FindingsTimelinePoint {
+  date: string;
+  runLabel: string;
+  critical: number;
+  warning: number;
+  info: number;
+  total: number;
+}
+
+export interface ToolSourceBreakdown {
+  tool: string;
+  name: string;
+  count: number;
+  percentage: number;
+  color: string;
+}
+
+export interface AnalyticsData {
+  timeline: FindingsTimelinePoint[];
+  toolSources: ToolSourceBreakdown[];
+  avgReviewTimeSeconds: number | null;
+  hasEnoughData: boolean;
+  totalFindingsAnalyzed: number;
 }
 
 export interface DashboardData {
@@ -99,6 +125,7 @@ export interface DashboardData {
   reviewRuns: DisplayReviewRun[];
   findingsCountByRunId: Record<string, number>;
   stats: DashboardStats;
+  analytics: AnalyticsData;
   installUrl: string | null;
   config: {
     hasSupabase: boolean;
