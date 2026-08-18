@@ -10,9 +10,10 @@
 [![Tailwind CSS v4](https://img.shields.io/badge/Tailwind_CSS-v4.0-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
 [![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white)](https://supabase.com/)
 [![Groq & Gemini](https://img.shields.io/badge/AI_Engine-Groq_Llama_3.3_|_Gemini_2.5-orange?style=for-the-badge&logo=google)](https://groq.com/)
+[![DevGuard AI Badge](https://dev-guard-ai.vercel.app/api/badge/status)](https://dev-guard-ai.vercel.app)
 [![License: MIT](https://img.shields.io/badge/License-MIT-emerald?style=for-the-badge)](LICENSE)
 
-[Live Demo](https://dev-guard-ai.vercel.app/) • [Dashboard](https://dev-guard-ai.vercel.app/dashboard) • [Architecture](#-system-architecture) • [Getting Started](#-getting-started) • [API Docs](#-api-endpoints)
+[Live Demo](https://dev-guard-ai.vercel.app/) • [Interactive Playground (/try)](https://dev-guard-ai.vercel.app/try) • [Security Dashboard](https://dev-guard-ai.vercel.app/dashboard) • [Architecture](#-system-architecture) • [API Docs](#-api-endpoints)
 
 ---
 
@@ -22,7 +23,7 @@
 
 **DevGuard AI** is an autonomous GitHub App that elevates code review quality from speculative text generation to **empirical evidence gathering**. 
 
-Traditional AI review bots simply feed PR diffs into an LLM and generate speculative comments. DevGuard AI treats the LLM as an **intelligent orchestrator** that actively invokes diagnostic tools (AST static linters, OSV vulnerability scanners, unit test runners) to collect verified proof before generating severity-tagged findings and one-click copyable inline pull request patches.
+Traditional AI review bots simply feed PR diffs into an LLM and generate speculative comments. DevGuard AI treats the LLM as an **intelligent orchestrator** that actively invokes diagnostic tools (AST static linters, OSV.dev vulnerability scanners, unit test runners) to collect verified proof before generating severity-tagged findings and one-click copyable inline pull request patches.
 
 ---
 
@@ -34,8 +35,11 @@ Traditional AI review bots simply feed PR diffs into an LLM and generate specula
 | **Evidence Basis** | Real tool logs, AST patterns, CVE databases | LLM guesses & hallucinations |
 | **Inline PR Fixes** | GitHub-compatible 1-click suggested code patches | Generic conversational advice |
 | **Rate Limit Resilience** | Multi-tier fallback: **Groq 70B ➡️ Gemini 2.5 Flash ➡️ Deterministic Engine** | Crashes on 429 rate-limit errors |
-| **Observability** | Full multi-step Agent Trace Inspector on web dashboard | Black-box output |
-| **Zero-Config Demo** | Built-in interactive sandbox for live simulation | Requires full repo access to test |
+| **Model Transparency** | Expandable Reasoning Trace showing tool I/O payloads & active model | Black-box output |
+| **Visual Analytics** | 30-day severity timeline & empirical tool attribution charts | Static numbers or empty state |
+| **Deliverables & Export** | Client-side **PDF Compliance Reports** & GitHub Markdown exports | No export options |
+| **Public Status Badges** | Dynamic shields.io-compatible SVG badges for repository READMEs | None |
+| **Interactive Sandbox** | Dedicated `/try` playground with live streaming progress & shareable URLs | Requires private repository install |
 
 ---
 
@@ -61,8 +65,9 @@ flowchart TD
         ToolTests["Tool: runTests<br/>(Test Suite Execution Engine)"]
     end
 
-    subgraph Frontend ["Security Dashboard & Observability UI"]
-        UI["Web Dashboard (/dashboard)<br/>• Repository Status<br/>• Step-by-Step Tool Trace Viewer<br/>• Interactive PR Simulation Engine"]
+    subgraph Observability ["Security Dashboard & Observability UI"]
+        UI["Web Dashboard (/dashboard)<br/>• 30-Day Trends & Tool Breakdown<br/>• Model Reasoning Trace Inspector<br/>• Dynamic README Badge Generator"]
+        Playground["Interactive Playground (/try)<br/>• Step-by-Step Live Progress<br/>• Shareable Public URLs (/try/result/[id])<br/>• PDF / Markdown Compliance Export"]
     end
 
     PR -->|Webhook Payload| WH
@@ -74,6 +79,7 @@ flowchart TD
     Orchestrator -->|Structured Findings JSON| DB
     Orchestrator -->|createReview API| Review
     DB --> UI
+    DB --> Playground
 ```
 
 ---
@@ -99,103 +105,51 @@ The agent orchestrator dynamically selects from the following tool suite to coll
 
 ---
 
-## 📁 Repository Structure
+## 🚀 Advanced Platform Features
 
-```
-devguard-ai/
-├── app/
-│   ├── api/
-│   │   ├── webhooks/github/route.ts   # GitHub Webhook HMAC-SHA256 receiver
-│   │   ├── reviews/[id]/route.ts      # Review run details & findings API
-│   │   └── simulate-review/route.ts   # Interactive live demo simulation endpoint
-│   ├── dashboard/page.tsx             # Main Security Dashboard & review history
-│   ├── page.tsx                       # Landing page & feature showcase
-│   ├── globals.css                    # Tailwind CSS v4 styling & dark theme tokens
-│   └── layout.tsx                     # Root layout with metadata
-├── components/
-│   ├── Navbar.tsx                     # Header navigation with quick links
-│   ├── ReviewDetailModal.tsx          # Multi-step agent trace & findings inspector
-│   └── SimulateReviewModal.tsx        # Live PR review simulation drawer
-├── lib/
-│   ├── agent/
-│   │   ├── orchestrator.ts            # Core agentic loop with Groq / Gemini tool calling
-│   │   └── tools/
-│   │       ├── lint.ts                # AST static linter & security scanner
-│   │       ├── deps-scan.ts           # OSV.dev dependency vulnerability scanner
-│   │       └── test-runner.ts         # Programmatic test suite runner
-│   ├── db/
-│   │   ├── supabase.ts                # Typed Supabase client & fallback mock store
-│   │   └── types.ts                   # TypeScript interfaces (Installations, Runs, Findings)
-│   └── github/
-│       └── client.ts                  # Octokit wrapper for diff fetching & review posting
-├── schema.sql                         # PostgreSQL schema for Supabase
-├── .env.example                       # Environment variables reference template
-├── vercel.json                        # Vercel deployment configuration
-└── tsconfig.json                      # TypeScript strict compiler configuration
-```
+### 1. Dedicated Self-Service Playground (`/try`)
+- Visitors can test preloaded vulnerability fixtures (SQLi, CVEs, async errors) or paste custom code diffs.
+- Real-time step-by-step progress streamed live via **Server-Sent Events (SSE)**.
+- Public shareable results at `/try/result/[id]` with zero authentication required.
+
+### 2. Visual Intelligence & Health Analytics
+- **Findings Over Time**: 30-day timeline stacked bar chart breaking down daily review volume by severity (Critical, Warning, Info).
+- **Tool Source Attribution**: Pie chart demonstrating what percentage of findings originated from the AST linter vs. OSV.dev vs. test runner.
+- **Average Time to Review**: Concrete engineering velocity metric measuring turnaround latency from webhook reception to review publication.
+
+### 3. Exportable Compliance Deliverables (`PDF & Markdown`)
+- 1-click **Client-Side PDF Document** generation with clean branding, severity summary cards, and Courier-formatted remediation code blocks.
+- **GitHub-Flavored Markdown export** and quick clipboard copy for engineering management audit trails.
+- Clean positive "ALL CLEAR" state when 0 security issues are detected.
+
+### 4. Model Transparency Panel ("Show Your Work")
+- Transparent model attribution badge indicating whether the synthesis was generated by `Groq Llama 3.3 70B`, `Gemini 2.5 Flash`, or deterministic fallback.
+- Explicit indicator if a Groq HTTP 429 rate limit triggered an automatic Gemini fallback.
+- Expandable step-by-step reasoning trace displaying input parameters and output payloads for each tool call.
+
+### 5. Dynamic Shields.io README Badges
+- Dynamic SVG status badge endpoint: `GET /api/badge/[repoId]`
+- Embed markdown:
+  ```markdown
+  [![DevGuard AI Status](https://dev-guard-ai.vercel.app/api/badge/your-repo-id)](https://dev-guard-ai.vercel.app)
+  [![Powered by DevGuard AI](https://dev-guard-ai.vercel.app/api/badge/powered-by)](https://dev-guard-ai.vercel.app)
+  ```
 
 ---
 
-## 🗄️ Database Schema
+## 🛠️ Tech Stack
 
-DevGuard AI utilizes Supabase Postgres for durable tracking of installations, review runs, findings, and tool execution traces:
-
-```sql
--- 1. GitHub Installations
-CREATE TABLE installations (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  github_installation_id BIGINT UNIQUE NOT NULL,
-  account_login TEXT NOT NULL,
-  account_avatar_url TEXT,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
--- 2. Repositories
-CREATE TABLE repos (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  installation_id UUID REFERENCES installations(id) ON DELETE CASCADE,
-  github_repo_id BIGINT UNIQUE NOT NULL,
-  full_name TEXT NOT NULL,
-  default_branch TEXT DEFAULT 'main',
-  is_active BOOLEAN NOT NULL DEFAULT TRUE,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
--- 3. Review Runs
-CREATE TABLE review_runs (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  repo_id UUID REFERENCES repos(id) ON DELETE CASCADE,
-  pr_number INT NOT NULL,
-  pr_title TEXT NOT NULL,
-  pr_author TEXT NOT NULL,
-  commit_sha TEXT NOT NULL,
-  status TEXT CHECK (status IN ('pending', 'in_progress', 'completed', 'failed')),
-  tool_calls_count INT DEFAULT 0,
-  agent_trace JSONB NOT NULL DEFAULT '[]'::jsonb,
-  started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  completed_at TIMESTAMPTZ
-);
-
--- 4. Findings
-CREATE TABLE findings (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  review_run_id UUID REFERENCES review_runs(id) ON DELETE CASCADE,
-  severity TEXT CHECK (severity IN ('critical', 'warning', 'info')),
-  file_path TEXT NOT NULL,
-  line INT NOT NULL DEFAULT 1,
-  message TEXT NOT NULL,
-  suggested_fix TEXT,
-  tool_source TEXT NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-```
+- **Framework**: Next.js 15 (App Router, Server Components & Route Handlers)
+- **Frontend**: React 19, Tailwind CSS v4, Lucide Icons, Recharts, jsPDF
+- **Database & Storage**: Supabase PostgreSQL
+- **AI Orchestration**: Groq SDK (`llama-3.3-70b-versatile`), Google GenAI SDK (`gemini-2.0-flash`)
+- **GitHub API**: Octokit REST & App Auth, Webhook Signature Verification (`@octokit/webhooks-methods`)
 
 ---
 
-## 🚀 Getting Started
+## 💻 Getting Started Locally
 
 ### 1. Clone & Install Dependencies
-
 ```bash
 git clone https://github.com/rajendrabist07/dev-guard-ai.git
 cd dev-guard-ai
@@ -203,119 +157,58 @@ npm install
 ```
 
 ### 2. Configure Environment Variables
-
 Copy `.env.example` to `.env.local`:
-
 ```bash
 cp .env.example .env.local
 ```
-
+Fill in the following credentials:
 ```env
 # GitHub App Configuration
-GITHUB_APP_ID=your_app_id
-GITHUB_APP_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----"
-GITHUB_WEBHOOK_SECRET=your_webhook_secret_string
-GITHUB_TOKEN=ghp_optional_fallback_token
+GITHUB_APP_ID=your_github_app_id
+GITHUB_APP_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n..."
+GITHUB_WEBHOOK_SECRET=your_webhook_secret
+NEXT_PUBLIC_GITHUB_APP_INSTALL_URL="https://github.com/apps/devguard-agent/installations/new"
 
-# AI Model Keys (Groq Llama 3.3 70B & Gemini 2.5 Flash Fallback)
+# AI Model Keys (Groq with Gemini Fallback)
 GROQ_API_KEY=your_groq_api_key
 GEMINI_API_KEY=your_gemini_api_key
 
-# Supabase Postgres Database
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
-SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+# Supabase Credentials
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your_anon_key
+SUPABASE_SERVICE_KEY=your_service_role_key
 ```
 
-> [!TIP]
-> **Graceful Degradation**: DevGuard AI includes built-in mock fallback handling. If you run the project locally without external API keys, the dashboard and simulation loop will execute smoothly with deterministic tool outputs.
+### 3. Run Automated Invariant & Quality Test Suites
+```bash
+npm run test:consistency   # Tests 0-findings/0-runs data invariants across consecutive queries
+npm run test:reports       # Validates multi-finding & clean PDF/Markdown generation
+npm run test:transparency  # Verifies real tool reasoning trace & LLM model attribution
+npm run test:badge         # Asserts SVG badge geometry, text calculations & color rules
+```
 
-### 3. Run Locally
-
+### 4. Start Development Server
 ```bash
 npm run dev
 ```
-
-Open [http://localhost:3000](http://localhost:3000) to view the landing page and [http://localhost:3000/dashboard](http://localhost:3000/dashboard) to explore the dashboard.
-
-### 4. Build & Type Check
-
-```bash
-npm run lint
-npm run build
-```
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ---
 
-## ⚙️ Setting Up the GitHub App
+## 📡 API Endpoints
 
-To connect DevGuard AI to live GitHub repositories:
-
-1. Navigate to **GitHub Settings ➡️ Developer Settings ➡️ GitHub Apps ➡️ [New GitHub App](https://github.com/settings/apps/new)**.
-2. Fill in the required parameters:
-   - **Homepage URL**: `https://dev-guard-ai.vercel.app`
-   - **Webhook URL**: `https://dev-guard-ai.vercel.app/api/webhooks/github`
-   - **Webhook Secret**: Your generated secret string (`GITHUB_WEBHOOK_SECRET`).
-3. Set **Repository Permissions**:
-   - **Pull requests**: `Read and write` (to post review comments and approve/request changes).
-   - **Contents**: `Read-only` (to inspect file diffs).
-4. Set **Subscribe to Events**:
-   - Check `Pull request` events.
-5. Create the App, download your `.pem` Private Key, and note your `App ID`.
-6. Click **Install App** in the left sidebar and select the repositories you want DevGuard AI to monitor.
+| Endpoint | Method | Purpose |
+| :--- | :--- | :--- |
+| `/api/webhooks/github` | `POST` | Verified GitHub App webhook handler for PR review automation |
+| `/api/try` | `POST` | SSE live streaming agent execution endpoint for playground |
+| `/api/try/history` | `GET` | Session-based history of past playground reviews |
+| `/api/try/result/[id]` | `GET` | Public unauthenticated review result lookup |
+| `/api/badge/[repoId]` | `GET` | Dynamic Shields.io SVG status badge generator |
+| `/api/dashboard` | `GET` | Security dashboard analytics, repositories & review runs data |
+| `/api/health` | `GET` | Real-time system health check & configured service status |
 
 ---
 
-## 🌐 API Endpoints
+## 🛡️ License
 
-### `POST /api/webhooks/github`
-Webhook endpoint receiving live GitHub PR events (`opened`, `synchronize`, `reopened`). Validates the `X-Hub-Signature-256` header, triggers the agentic review loop, and writes findings to GitHub and Supabase.
-
-### `POST /api/simulate-review`
-Sandbox execution endpoint allowing developers and demo judges to test the agent on custom or preset diffs.
-- **Request Body**:
-  ```json
-  {
-    "prTitle": "feat: payment checkout endpoint refactor",
-    "prAuthor": "alex-dev",
-    "diff": "--- a/app/api/checkout/route.ts\n+++ b/app/api/checkout/route.ts...",
-    "fileNames": ["app/api/checkout/route.ts", "package.json"]
-  }
-  ```
-- **Response**: Returns the complete review run status, tool execution trace steps, and severity-categorized findings.
-
-### `GET /api/reviews/[id]`
-Fetches the execution history, status, and findings for a specific review run ID.
-
----
-
-## 🔒 Security & Best Practices
-
-- **Signature Verification**: All incoming webhooks are validated against `X-Hub-Signature-256` using HMAC SHA-256 before any payload processing.
-- **Iteration Capping**: The autonomous loop is hard-capped at **5 iterations** to eliminate runaway token consumption and infinite loops.
-- **Secret Protection**: API private keys and tokens are securely isolated to server-side routes; `.env` files are excluded from version control.
-- **Least Privilege Access**: GitHub App requests only minimal required permissions (`Pull requests: write`, `Contents: read`).
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request or open an Issue.
-
-1. Fork the repository
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'feat: add amazing feature'`)
-4. Push to the Branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
----
-
-## 📜 License
-
-Distributed under the **MIT License**. See `LICENSE` for more information.
-
----
-
-<div align="center">
-Built with precision for developers by the <strong>DevGuard AI Team</strong>.
-</div>
+Distributed under the MIT License. See [LICENSE](LICENSE) for more details.
