@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { AgentTraceStep, Finding, Severity, TryRun } from '@/lib/db/types';
 import ExportReportMenu from '@/components/ExportReportMenu';
+import ModelTransparencyPanel from '@/components/ModelTransparencyPanel';
 
 interface SampleFixture {
   id: string;
@@ -713,6 +714,13 @@ export default function TryPage() {
                   </span>
                 </div>
               </div>
+
+              {/* Model Transparency & Reasoning Panel */}
+              <ModelTransparencyPanel
+                providerUsed={result.providerUsed || 'Groq Llama 3.3 70B'}
+                agentTrace={result.trace}
+                toolCallsCount={result.toolCallsCount}
+              />
             </div>
 
             {/* Tab Selector: Findings vs Agent Trace */}

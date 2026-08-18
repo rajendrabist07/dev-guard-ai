@@ -2,6 +2,7 @@ import { AgentTraceStep, NewFinding } from '../db/types';
 import { scanDependencies } from './tools/deps-scan';
 import { runLinter } from './tools/lint';
 import { runTests } from './tools/test-runner';
+import { synthesizeReviewWithLLM } from './llm';
 
 export interface ProgressUpdate {
   step: number;
@@ -16,7 +17,10 @@ export interface OrchestrationResult {
   trace: AgentTraceStep[];
   toolCallsCount: number;
   summary: string;
-  providerUsed: 'local-agent';
+  providerUsed: string;
+  modelUsed: string;
+  fallbackTriggered: boolean;
+  fallbackReason?: string;
 }
 
 const MAX_ITERATIONS = 5;
@@ -26,7 +30,10 @@ function toRecord(value: unknown): Record<string, unknown> {
 }
 
 function shouldScanDependencies(diff: string, fileNames: string[]): boolean {
-  return fileNames.some((fileName) => fileName.endsWith('package.json')) || /dependencies|devDependencies|"axios"|"lodash"|"express"|"stripe"|"jsonwebtoken"|"minimist"/.test(diff);
+  return (
+    fileNames.some((fileName) => fileName.endsWith('package.json')) ||
+    /dependencies|devDependencies|"axios"|"lodash"|"express"|"stripe"|"jsonwebtoken"|"minimist"/.test(diff)
+  );
 }
 
 function shouldRunTests(diff: string): boolean {
@@ -89,9 +96,11 @@ export async function runAgentOrchestrator(
     });
   }
 
+  let depsSummary = 'Dependency scan skipped (no package manifest modified)';
   if (trace.length < MAX_ITERATIONS && shouldScanDependencies(prDiff, fileNames)) {
     const depsResult = await scanDependencies(prDiff);
     recordTrace('scanDependencies', { manifest: 'package.json' }, toRecord(depsResult));
+    depsSummary = depsResult.summary;
 
     for (const vulnerability of depsResult.vulnerabilities) {
       if (vulnerability.vulnerabilityId === 'NONE') continue;
@@ -119,9 +128,11 @@ export async function runAgentOrchestrator(
     });
   }
 
+  let testSummary = 'Test suite skipped (non-executable diff)';
   if (trace.length < MAX_ITERATIONS && shouldRunTests(prDiff)) {
     const testResult = await runTests(undefined, prDiff);
     recordTrace('runTests', { command: 'npm test' }, toRecord(testResult));
+    testSummary = testResult.summary;
 
     for (const failure of testResult.failures) {
       findings.push({
@@ -136,32 +147,36 @@ export async function runAgentOrchestrator(
     }
   }
 
-  // Step 4: LLM Synthesis
+  // Step 4: LLM Synthesis with Transparent Attribution & Rate Limit Fallback
   if (onProgress) {
     await onProgress({
       step: 4,
       totalSteps,
-      message: 'Synthesizing findings & generating structured review report...',
+      message: 'Synthesizing findings with AI model & generating review report...',
       tool: 'synthesizeReview',
     });
   }
 
-  const criticals = findings.filter((finding) => finding.severity === 'critical').length;
-  const warnings = findings.filter((finding) => finding.severity === 'warning').length;
-  const infos = findings.filter((finding) => finding.severity === 'info').length;
+  const toolOutputs = [
+    { tool: 'runLinter', summary: lintResult.summary, findingsCount: lintResult.items.length },
+    { tool: 'scanDependencies', summary: depsSummary, findingsCount: findings.filter((f) => f.tool_source === 'scanDependencies').length },
+    { tool: 'runTests', summary: testSummary, findingsCount: findings.filter((f) => f.tool_source === 'runTests').length },
+  ];
+
+  const synthesis = await synthesizeReviewWithLLM({
+    prTitle: fileNames.join(', '),
+    diffSummary: `Modified ${fileNames.length} file(s): ${fileNames.slice(0, 3).join(', ')}`,
+    toolOutputs,
+  });
 
   return {
     findings,
     trace,
     toolCallsCount: trace.length,
-    providerUsed: 'local-agent',
-    summary: [
-      '### Summary of Autonomous Review Findings',
-      `- Critical findings: ${criticals}`,
-      `- Warnings: ${warnings}`,
-      `- Informational notes: ${infos}`,
-      '',
-      `DevGuard AI completed ${trace.length} tool execution(s), capped at ${MAX_ITERATIONS} iterations.`,
-    ].join('\n'),
+    providerUsed: synthesis.provider,
+    modelUsed: synthesis.model,
+    fallbackTriggered: synthesis.fallbackTriggered,
+    fallbackReason: synthesis.fallbackReason,
+    summary: synthesis.summary,
   };
 }

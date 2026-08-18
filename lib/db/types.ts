@@ -30,6 +30,8 @@ export interface ReviewRun {
   agent_trace: AgentTraceStep[];
   error_message: string | null;
   is_simulation: boolean;
+  provider_used?: string | null;
+  fallback_reason?: string | null;
   created_at: string;
 }
 

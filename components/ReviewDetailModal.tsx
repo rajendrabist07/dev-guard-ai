@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { DisplayReviewRun, Finding } from '@/lib/db/types';
 import ExportReportMenu from '@/components/ExportReportMenu';
+import ModelTransparencyPanel from '@/components/ModelTransparencyPanel';
 import { X, ShieldAlert, AlertTriangle, Info, Terminal, CheckCircle2, Copy, Check, Cpu, Code2 } from 'lucide-react';
 
 interface ReviewDetailModalProps {
@@ -115,7 +116,15 @@ export default function ReviewDetailModal({ run, findings, onClose }: ReviewDeta
         </div>
 
         {/* Modal Body */}
-        <div className="p-6 overflow-y-auto space-y-4 flex-1">
+        <div className="p-6 overflow-y-auto space-y-5 flex-1">
+          {/* Model Transparency & Reasoning Bar */}
+          <ModelTransparencyPanel
+            providerUsed={run.provider_used || 'Groq Llama 3.3 70B'}
+            fallbackReason={run.fallback_reason || undefined}
+            agentTrace={run.agent_trace}
+            toolCallsCount={run.tool_calls_count}
+          />
+
           {activeTab === 'findings' && (
             <div>
               {findings.length === 0 ? (

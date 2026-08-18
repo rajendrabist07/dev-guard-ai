@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint .",
     "test:consistency": "npx tsx scripts/verify-data-consistency.ts",
-    "test:reports": "npx tsx scripts/verify-export-reports.ts"
+    "test:reports": "npx tsx scripts/verify-export-reports.ts",
+    "test:transparency": "npx tsx scripts/verify-model-transparency.ts"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

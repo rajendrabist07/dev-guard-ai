@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { TryRun, Severity } from '@/lib/db/types';
 import ExportReportMenu from '@/components/ExportReportMenu';
+import ModelTransparencyPanel from '@/components/ModelTransparencyPanel';
 
 export default function TryResultPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -250,6 +251,13 @@ export default function TryResultPage({ params }: { params: Promise<{ id: string
                   </span>
                 </div>
               </div>
+
+              {/* Model Transparency & Reasoning Bar */}
+              <ModelTransparencyPanel
+                providerUsed={run.provider_used || 'Groq Llama 3.3 70B'}
+                agentTrace={run.agent_trace}
+                toolCallsCount={run.tool_calls_count}
+              />
             </div>
 
             {/* Tabbed Results Body */}
