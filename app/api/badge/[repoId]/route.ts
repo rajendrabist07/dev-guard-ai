@@ -1,13 +1,19 @@
 import { NextRequest } from 'next/server';
 import { generateBadgeSvg } from '@/lib/badge/svg';
 import { supabaseAdmin } from '@/lib/db/supabase';
+import { BadgeParamsSchema } from '@/lib/validation/schemas';
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ repoId: string }> }
 ) {
   const resolvedParams = await params;
-  const rawId = decodeURIComponent(resolvedParams.repoId || 'status');
+  const parseResult = BadgeParamsSchema.safeParse(resolvedParams);
+  if (!parseResult.success) {
+    return new Response('Invalid repo ID parameter', { status: 400 });
+  }
+
+  const rawId = decodeURIComponent(parseResult.data.repoId || 'status');
   const searchParams = req.nextUrl.searchParams;
   const customLabel = searchParams.get('label') || 'DevGuard AI';
 

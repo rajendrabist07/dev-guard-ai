@@ -206,7 +206,13 @@ Weekly automated dependency scanning is configured via Dependabot (`.github/depe
 - **Sentry Integration**: Unhandled exceptions and fallback events report directly to Sentry with sanitized execution context.
 - **Real-Time Health Monitoring**: Inspect live database, GitHub App authentication, and AI provider health at `/api/health`.
 
-### 6. Start Development Server
+### 6. Security Hardening & Safe Execution Architecture
+- **Strict Input Validation**: All public endpoints are guarded with typed Zod schemas (`lib/validation/schemas.ts`), strictly enforcing maximum payload sizes (100KB) and rejecting malformed inputs with HTTP 400.
+- **Rate Limiting & Abuse Mitigation**: Sliding-window rate limiting via Upstash Redis (`lib/security/ratelimit.ts`) limits requests to 5 per 10 minutes per IP with graceful HTTP 429 response handling and `Retry-After` headers.
+- **Zero Arbitrary Execution Sandbox**: The static linter and diagnostic tools operate exclusively via in-memory abstract syntax tree (AST) matching, regular expression inspection, and deterministic mock assertions. **User-submitted code is never executed via `eval()`, `child_process`, or shell subshells**, preventing Remote Code Execution (RCE) and filesystem traversal.
+- **HTTP Security Headers**: Automated enforcement of `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, and restricted `Permissions-Policy` in `next.config.ts`.
+
+### 7. Start Development Server
 ```bash
 npm run dev
 ```

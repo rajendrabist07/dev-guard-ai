@@ -11,25 +11,70 @@ import {
 } from '@/lib/db/supabase';
 import { DisplayReviewRun, Finding } from '@/lib/db/types';
 import { logger } from '@/lib/observability/logger';
+import { TryApiSchema } from '@/lib/validation/schemas';
+import { checkRateLimit } from '@/lib/security/ratelimit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json()) as {
-      prTitle?: string;
-      prAuthor?: string;
-      diff?: string;
-      fileNames?: string[];
-      sessionId?: string;
-      inputType?: 'sample' | 'pasted';
-    };
+    // 1. IP Rate Limiting (5 requests per 10 mins)
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || '127.0.0.1';
+    const rateLimit = await checkRateLimit(ip);
 
-    const { prTitle, prAuthor, diff, fileNames, sessionId, inputType } = body;
+    if (!rateLimit.success) {
+      logger.warn('Rate limit exceeded on /api/try', {
+        module: 'try-api',
+        action: 'rate-limit-blocked',
+        ip: '[REDACTED_IP]',
+      });
+      return NextResponse.json(
+        {
+          error: 'Rate limit exceeded. You have made 5 test requests in the last 10 minutes. Please wait a few minutes before running another review.',
+          retryAfterMs: rateLimit.reset - Date.now(),
+        },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(Math.ceil((rateLimit.reset - Date.now()) / 1000)),
+            'X-RateLimit-Limit': String(rateLimit.limit),
+            'X-RateLimit-Remaining': String(rateLimit.remaining),
+          },
+        }
+      );
+    }
+
+    // 2. Strict Zod Schema Validation
+    let rawBody: unknown;
+    try {
+      rawBody = await req.json();
+    } catch {
+      return NextResponse.json({ error: 'Malformed JSON payload' }, { status: 400 });
+    }
+
+    const validationResult = TryApiSchema.safeParse(rawBody);
+    if (!validationResult.success) {
+      logger.warn('Invalid /api/try payload rejected', {
+        module: 'try-api',
+        action: 'validation-failed',
+        errors: validationResult.error.flatten(),
+      });
+      return NextResponse.json(
+        {
+          error: 'Invalid request payload',
+          details: validationResult.error.flatten().fieldErrors,
+        },
+        { status: 400 }
+      );
+    }
+
+    const body = validationResult.data;
+    const { prTitle, prAuthor, diff, fileNames, sessionId, inputType, codeSnippet, files } = body;
 
     const sampleDiff =
       diff ||
+      codeSnippet ||
       `--- a/app/api/checkout/route.ts
 +++ b/app/api/checkout/route.ts
 @@ -34,6 +34,8 @@ export async function POST(req: Request) {
@@ -47,6 +92,8 @@ export async function POST(req: NextRequest) {
     const targetFiles =
       fileNames && fileNames.length > 0
         ? fileNames
+        : files && files.length > 0
+        ? files
         : ['app/api/checkout/route.ts', 'package.json'];
 
     const generatedRunId = `try-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
