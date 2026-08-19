@@ -5,6 +5,13 @@ import { NewFinding } from '../db/types';
 
 const webhookSecret = process.env.GITHUB_WEBHOOK_SECRET || '';
 
+/**
+ * Validates the HMAC-SHA256 signature transmitted in `x-hub-signature-256` header.
+ * 
+ * @param body - Raw request payload string (unparsed)
+ * @param signature - Signature string sent in header (e.g. `sha256=...`)
+ * @returns {Promise<boolean>} True if signature matches secret and payload, false otherwise
+ */
 export async function verifyGitHubWebhook(body: string, signature: string): Promise<boolean> {
   if (!webhookSecret) {
     console.error('GITHUB_WEBHOOK_SECRET is not set; rejecting webhook request.');
@@ -22,6 +29,12 @@ function getGitHubPrivateKey(): string {
   return (process.env.GITHUB_APP_PRIVATE_KEY || process.env.GITHUB_PRIVATE_KEY || '').replace(/\\n/g, '\n');
 }
 
+/**
+ * Instantiates an authenticated Octokit client for the target GitHub App installation.
+ * 
+ * @param installationId - Optional numeric GitHub installation ID
+ * @returns {Promise<Octokit>} Authenticated Octokit REST client
+ */
 export async function getOctokitClient(installationId?: number): Promise<Octokit> {
   const appId = process.env.GITHUB_APP_ID;
   const privateKey = getGitHubPrivateKey();
@@ -40,6 +53,15 @@ export async function getOctokitClient(installationId?: number): Promise<Octokit
   return new Octokit({ auth: token });
 }
 
+/**
+ * Fetches pull request files and synthesizes a unified git patch diff.
+ * 
+ * @param octokit - Authenticated Octokit client
+ * @param owner - Repository owner login
+ * @param repo - Repository name
+ * @param pullNumber - Pull request number
+ * @returns {Promise<{ diff: string; files: string[] }>} Unified diff and array of modified filenames
+ */
 export async function fetchPullRequestDiff(
   octokit: Octokit,
   owner: string,
@@ -65,6 +87,17 @@ export async function fetchPullRequestDiff(
   }
 }
 
+/**
+ * Formats and posts an empirical review comment with one-click fix patches to GitHub.
+ * 
+ * @param octokit - Authenticated Octokit client
+ * @param owner - Repository owner login
+ * @param repo - Repository name
+ * @param pullNumber - Pull request number
+ * @param commitSha - Latest commit SHA of the pull request
+ * @param findings - Array of identified security and quality findings
+ * @param summaryText - Synthesized summary of review findings
+ */
 export async function postGitHubReviewComment(
   octokit: Octokit,
   owner: string,

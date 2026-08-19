@@ -14,7 +14,7 @@
 [![DevGuard AI Badge](https://dev-guard-ai.vercel.app/api/badge/status)](https://dev-guard-ai.vercel.app)
 [![License: MIT](https://img.shields.io/badge/License-MIT-emerald?style=for-the-badge)](LICENSE)
 
-[Live Demo](https://dev-guard-ai.vercel.app/) • [Interactive Playground (/try)](https://dev-guard-ai.vercel.app/try) • [Security Dashboard](https://dev-guard-ai.vercel.app/dashboard) • [Architecture](#-system-architecture) • [API Docs](#-api-endpoints)
+[Live Demo](https://dev-guard-ai.vercel.app/) • [Interactive Playground (/try)](https://dev-guard-ai.vercel.app/try) • [Security Dashboard](https://dev-guard-ai.vercel.app/dashboard) • [Architecture](docs/architecture.md) • [Changelog](CHANGELOG.md) • [Contributing](CONTRIBUTING.md) • [API Docs](#-api-endpoints)
 
 ---
 

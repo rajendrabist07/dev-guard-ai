@@ -40,6 +40,23 @@ function shouldRunTests(diff: string): boolean {
   return /api|route|auth|checkout|payment|test|spec/.test(diff);
 }
 
+/**
+ * Executes the core empirical agent loop across pull request diffs.
+ * 
+ * Non-obvious architectural invariants:
+ * 1. **Empirical First**: The agent does not prompt the LLM on raw code alone. It first invokes diagnostic
+ *    tools (`runLinter`, `scanDependencies`, `runTests`) to gather concrete AST errors, CVE IDs, and test failures.
+ * 2. **Hard 5-Iteration Cap (`MAX_ITERATIONS = 5`)**: Caps tool execution steps to 5 iterations maximum to
+ *    prevent infinite loops or unbounded cloud compute usage.
+ * 3. **Multi-Tier LLM Fallback**: Synthesis attempts primary Groq Llama 3.3 70B, gracefully falling back to
+ *    Gemini 2.5 Flash on HTTP 429 rate limits, and finally a deterministic rule-based engine if offline.
+ * 
+ * @param prDiff - Unified git diff content of the pull request or snippet
+ * @param fileNames - List of file paths modified within the diff
+ * @param reviewRunId - Unique identifier of the review run for trace tracking
+ * @param onProgress - Optional real-time progress callback for SSE streaming
+ * @returns {Promise<OrchestrationResult>} Aggregated findings, step-by-step trace, and synthesis metadata
+ */
 export async function runAgentOrchestrator(
   prDiff: string,
   fileNames: string[],

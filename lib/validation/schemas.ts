@@ -20,3 +20,39 @@ export const GitHubWebhookHeadersSchema = z.object({
 export const BadgeParamsSchema = z.object({
   repoId: z.string().trim().min(1).max(128),
 });
+
+// Inferred TypeScript Type Contracts
+export type TryApiRequest = z.infer<typeof TryApiSchema>;
+export type GitHubWebhookHeaders = z.infer<typeof GitHubWebhookHeadersSchema>;
+export type BadgeParams = z.infer<typeof BadgeParamsSchema>;
+
+export interface TryApiResponse {
+  success: boolean;
+  reviewRunId: string;
+  shareUrl: string;
+  status: 'completed' | 'failed' | 'running';
+  toolCallsCount: number;
+  trace: Array<{
+    step: number;
+    tool: string;
+    input: unknown;
+    output: unknown;
+    timestamp: string;
+  }>;
+  summary: string;
+  findings: Array<unknown>;
+  providerUsed: string;
+}
+
+export interface HealthApiResponse {
+  status: 'healthy' | 'degraded' | 'unhealthy';
+  timestamp: string;
+  services: {
+    supabase: { status: string; message?: string };
+    githubApp: { status: string; message?: string; appId?: string };
+    aiProviders: {
+      groq: boolean;
+      gemini: boolean;
+    };
+  };
+}
