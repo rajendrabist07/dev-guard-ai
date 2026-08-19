@@ -200,7 +200,13 @@ The repository includes a GitHub Actions workflow (`.github/workflows/ci.yml`) t
 
 Weekly automated dependency scanning is configured via Dependabot (`.github/dependabot.yml`).
 
-### 5. Start Development Server
+### 5. Observability & Error Tracking
+- **Structured JSON Logging**: All webhook invocations, LLM multi-tier fallbacks, and agent tool executions output structured JSON payloads (`lib/observability/logger.ts`) formatted for Vercel Log Streams and Datadog.
+- **Zero-Secret Guarantee**: Built-in regex-based secret scrubber actively redacts API keys (`sk_live_*`, `ghp_*`, `AIza*`), JWT tokens, and cryptographic signatures before writing logs.
+- **Sentry Integration**: Unhandled exceptions and fallback events report directly to Sentry with sanitized execution context.
+- **Real-Time Health Monitoring**: Inspect live database, GitHub App authentication, and AI provider health at `/api/health`.
+
+### 6. Start Development Server
 ```bash
 npm run dev
 ```

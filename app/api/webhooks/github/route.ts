@@ -1,9 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { fetchPullRequestDiff, getOctokitClient, postGitHubReviewComment, verifyGitHubWebhook } from '@/lib/github/client';
-import { createReviewRun, ensureRepoForInstallation, saveFindings, updateReviewRun } from '@/lib/db/supabase';
+import {
+  fetchPullRequestDiff,
+  getOctokitClient,
+  postGitHubReviewComment,
+  verifyGitHubWebhook,
+} from '@/lib/github/client';
+import {
+  createReviewRun,
+  ensureRepoForInstallation,
+  saveFindings,
+  updateReviewRun,
+} from '@/lib/db/supabase';
 import { runAgentOrchestrator } from '@/lib/agent/orchestrator';
+import { logger } from '@/lib/observability/logger';
 
 export async function POST(req: NextRequest) {
+  const startTime = Date.now();
+
   try {
     const rawBody = await req.text();
     const signature = req.headers.get('x-hub-signature-256') || '';
@@ -12,6 +25,11 @@ export async function POST(req: NextRequest) {
     // 1. Verify Webhook Signature
     const isValid = await verifyGitHubWebhook(rawBody, signature);
     if (!isValid) {
+      logger.warn('Rejected GitHub webhook due to invalid HMAC-SHA256 signature', {
+        module: 'webhook-handler',
+        action: 'verify-signature',
+        eventType,
+      });
       return NextResponse.json({ error: 'Invalid webhook signature' }, { status: 401 });
     }
 
@@ -30,7 +48,7 @@ export async function POST(req: NextRequest) {
       };
     };
 
-    // Filter for pull_request events (opened, synchronize)
+    // Filter for pull_request events (opened, synchronize, reopened)
     if (eventType === 'pull_request') {
       const action = payload.action;
       if (action && ['opened', 'synchronize', 'reopened'].includes(action)) {
@@ -38,6 +56,10 @@ export async function POST(req: NextRequest) {
         const repo = payload.repository;
 
         if (!pr || !repo) {
+          logger.warn('Malformed pull_request event payload received', {
+            module: 'webhook-handler',
+            action: 'parse-payload',
+          });
           return NextResponse.json({ message: 'Malformed pull_request event ignored' }, { status: 200 });
         }
 
@@ -47,13 +69,26 @@ export async function POST(req: NextRequest) {
         const prTitle = pr.title || '';
         const prAuthor = pr.user?.login || 'unknown';
         const installationId = payload.installation?.id;
+
         if (!installationId) {
+          logger.warn('Missing GitHub installation id in webhook', {
+            module: 'webhook-handler',
+            repoFullName,
+            prNumber,
+          });
           return NextResponse.json({ message: 'Missing GitHub installation id' }, { status: 200 });
         }
-        const githubInstallationId = String(installationId);
+
+        logger.info('Processing GitHub pull request webhook', {
+          module: 'webhook-handler',
+          action: 'start-review',
+          repoFullName,
+          prNumber,
+          commitSha: commitSha.substring(0, 7),
+        });
 
         const storedRepo = await ensureRepoForInstallation({
-          githubInstallationId,
+          githubInstallationId: String(installationId),
           accountLogin: repo.owner?.login ?? repoFullName.split('/')[0],
           fullName: repoFullName,
         });
@@ -100,6 +135,14 @@ export async function POST(req: NextRequest) {
             completed_at: new Date().toISOString(),
             error_message: null,
           });
+
+          logger.info('Autonomous PR review completed successfully', {
+            module: 'webhook-handler',
+            action: 'review-completed',
+            reviewRunId: reviewRun.id,
+            findingsCount: result.findings.length,
+            durationMs: Date.now() - startTime,
+          });
         } catch (err: unknown) {
           const message = err instanceof Error ? err.message : 'Review processing failed.';
           await updateReviewRun(reviewRun.id, {
@@ -107,7 +150,11 @@ export async function POST(req: NextRequest) {
             completed_at: new Date().toISOString(),
             error_message: message,
           });
-          console.error('GitHub review processing failed:', err);
+          logger.error('PR review execution failed', err, {
+            module: 'webhook-handler',
+            action: 'agent-orchestration',
+            reviewRunId: reviewRun.id,
+          });
         }
 
         return NextResponse.json({
@@ -120,7 +167,10 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ message: 'Event ignored' }, { status: 200 });
   } catch (err: unknown) {
-    console.error('Error handling GitHub webhook:', err);
+    logger.error('Unhandled exception in GitHub webhook handler', err, {
+      module: 'webhook-handler',
+      action: 'process-request',
+    });
     const message = err instanceof Error ? err.message : 'Internal Server Error';
     return NextResponse.json({ error: message }, { status: 200 });
   }

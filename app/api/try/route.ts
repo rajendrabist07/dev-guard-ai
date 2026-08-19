@@ -10,6 +10,7 @@ import {
   updateReviewRun,
 } from '@/lib/db/supabase';
 import { DisplayReviewRun, Finding } from '@/lib/db/types';
+import { logger } from '@/lib/observability/logger';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -200,7 +201,11 @@ export async function POST(req: NextRequest) {
           });
         } catch (err: unknown) {
           clearTimeout(timeoutTimer);
-          console.error('Try execution error:', err);
+          logger.error('Playground review execution error', err, {
+            module: 'try-api',
+            action: 'stream-execution',
+            reviewRunId: generatedRunId,
+          });
           const errorMsg =
             err instanceof Error
               ? err.name === 'AbortError'
@@ -263,7 +268,10 @@ export async function POST(req: NextRequest) {
       providerUsed: result.providerUsed,
     });
   } catch (err: unknown) {
-    console.error('Error in try API endpoint:', err);
+    logger.error('Unhandled error in try API route', err, {
+      module: 'try-api',
+      action: 'process-request',
+    });
     const message = err instanceof Error ? err.message : 'Try review execution failed';
     return NextResponse.json({ error: message }, { status: 500 });
   }

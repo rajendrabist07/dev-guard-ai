@@ -19,6 +19,7 @@
     "@octokit/auth-app": "^7.1.1",
     "@octokit/rest": "^21.1.1",
     "@octokit/webhooks-methods": "^6.0.0",
+    "@sentry/nextjs": "^10.70.0",
     "@supabase/supabase-js": "^2.48.1",
     "clsx": "^2.1.1",
     "groq-sdk": "^0.15.0",

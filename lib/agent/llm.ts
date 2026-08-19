@@ -1,5 +1,6 @@
 import Groq from 'groq-sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { logger } from '@/lib/observability/logger';
 
 export interface LLMSynthesisInput {
   prTitle?: string;
@@ -73,7 +74,11 @@ Provide a concise 3-4 bullet executive summary of the review findings and action
         ? 'Groq rate limit exceeded (HTTP 429) — switched to Gemini 2.5 Flash'
         : `Groq request error: ${groqErr instanceof Error ? groqErr.message : 'service unreachable'}`;
 
-      console.warn(`[DevGuard LLM] ${reason}. Attempting Tier 2 (Gemini)...`);
+      logger.warn(reason, {
+        module: 'llm-synthesizer',
+        action: 'groq-fallback',
+        isRateLimit,
+      });
 
       // Tier 2: Fallback to Google Gemini
       if (geminiKey && !geminiKey.includes('your_gemini_api_key')) {
@@ -84,6 +89,11 @@ Provide a concise 3-4 bullet executive summary of the review findings and action
           const geminiSummary = res.response.text().trim();
 
           if (geminiSummary) {
+            logger.info('Successfully synthesized findings via Gemini 2.5 Flash fallback', {
+              module: 'llm-synthesizer',
+              provider: 'Gemini 2.5 Flash',
+            });
+
             return {
               summary: geminiSummary,
               provider: 'Gemini 2.5 Flash',
@@ -94,7 +104,10 @@ Provide a concise 3-4 bullet executive summary of the review findings and action
             };
           }
         } catch (geminiErr) {
-          console.warn('[DevGuard LLM] Gemini fallback failed as well:', geminiErr);
+          logger.error('Gemini fallback failed as well, using deterministic engine', geminiErr, {
+            module: 'llm-synthesizer',
+            action: 'gemini-fallback-failed',
+          });
         }
       }
     }
