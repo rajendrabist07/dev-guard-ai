@@ -1,9 +1,6 @@
-import type { NextConfig } from 'next';
-import path from 'node:path';
-
-const nextConfig: NextConfig = {
+/** @type {import('next').NextConfig} */
+const nextConfig = {
   reactStrictMode: true,
-  outputFileTracingRoot: path.join(__dirname),
   typescript: {
     ignoreBuildErrors: false,
   },
