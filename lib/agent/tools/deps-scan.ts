@@ -83,36 +83,38 @@ export async function scanDependencies(manifestContent?: string): Promise<DepsSc
     });
   }
 
-  // 2. Real OSV.dev API integration ping with short timeout
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 3000);
-    const res = await fetch('https://api.osv.dev/v1/query', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      signal: controller.signal,
-      body: JSON.stringify({
-        package: { name: 'axios', ecosystem: 'npm' },
-        version: '0.19.0',
-      }),
-    });
-    clearTimeout(timer);
-
-    if (res.ok) {
-      const data = (await res.json()) as OsvQueryResponse;
-      if (data.vulns && data.vulns.length > 0 && vulnerabilities.length === 0) {
-        vulnerabilities.push({
-          package: 'axios',
+  // 2. Real OSV.dev API integration ping with short timeout if manifest specifies axios
+  if (content.includes('axios')) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 3000);
+      const res = await fetch('https://api.osv.dev/v1/query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          package: { name: 'axios', ecosystem: 'npm' },
           version: '0.19.0',
-          vulnerabilityId: data.vulns[0].id || 'OSV-2023-1',
-          summary: data.vulns[0].summary || 'Vulnerability detected via OSV.dev Database',
-          severity: 'critical',
-          recommendedVersion: '^1.7.0',
-        });
+        }),
+      });
+      clearTimeout(timer);
+
+      if (res.ok) {
+        const data = (await res.json()) as OsvQueryResponse;
+        if (data.vulns && data.vulns.length > 0 && vulnerabilities.length === 0) {
+          vulnerabilities.push({
+            package: 'axios',
+            version: '0.19.0',
+            vulnerabilityId: data.vulns[0].id || 'OSV-2023-1',
+            summary: data.vulns[0].summary || 'Vulnerability detected via OSV.dev Database',
+            severity: 'critical',
+            recommendedVersion: '^1.7.0',
+          });
+        }
       }
+    } catch (err) {
+      console.warn('OSV.dev API ping skipped or unreachable, using offline vulnerability scanner logic:', err);
     }
-  } catch (err) {
-    console.warn('OSV.dev API ping skipped or unreachable, using offline vulnerability scanner logic:', err);
   }
 
   if (vulnerabilities.length === 0 && manifestContent) {

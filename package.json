@@ -5,8 +5,9 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
     "lint": "eslint .",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:consistency": "npx tsx scripts/verify-data-consistency.ts",
     "test:reports": "npx tsx scripts/verify-export-reports.ts",
     "test:transparency": "npx tsx scripts/verify-model-transparency.ts",
@@ -34,11 +35,14 @@
     "@types/node": "^22.13.0",
     "@types/react": "^19.0.8",
     "@types/react-dom": "^19.0.3",
+    "@vitest/coverage-v8": "^4.1.11",
+    "@vitest/ui": "^4.1.11",
     "eslint": "^9.19.0",
     "eslint-config-next": "^15.1.7",
     "postcss": "^8.5.1",
     "prettier": "^3.4.2",
     "tailwindcss": "^4.0.0",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "vitest": "^4.1.11"
   }
 }
