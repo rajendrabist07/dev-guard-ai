@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { runAgentOrchestrator } from '@/lib/agent/orchestrator';
 
 describe('Agent Orchestrator Loop (lib/agent/orchestrator.ts)', () => {

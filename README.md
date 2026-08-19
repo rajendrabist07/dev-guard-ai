@@ -4,6 +4,7 @@
 ### Autonomous PR Security & Code Review Agent
 **Empirical Tool-Calling Review Loop • Zero Hallucinations • Production-Grade Security Feedback**
 
+[![CI Pipeline](https://github.com/rajendrabist07/dev-guard-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/rajendrabist07/dev-guard-ai/actions/workflows/ci.yml)
 [![Next.js 15](https://img.shields.io/badge/Next.js-15.1-black?style=for-the-badge&logo=next.js)](https://nextjs.org/)
 [![React 19](https://img.shields.io/badge/React-19.0-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
@@ -181,13 +182,25 @@ SUPABASE_SERVICE_KEY=your_service_role_key
 
 ### 3. Run Automated Invariant & Quality Test Suites
 ```bash
+npm test                   # Runs Vitest unit & integration test suite (27 passing tests)
+npm run test:coverage      # Generates v8 code coverage report
 npm run test:consistency   # Tests 0-findings/0-runs data invariants across consecutive queries
 npm run test:reports       # Validates multi-finding & clean PDF/Markdown generation
 npm run test:transparency  # Verifies real tool reasoning trace & LLM model attribution
 npm run test:badge         # Asserts SVG badge geometry, text calculations & color rules
 ```
 
-### 4. Start Development Server
+### 4. Branch Protection & CI Enforcement
+The repository includes a GitHub Actions workflow (`.github/workflows/ci.yml`) that triggers on all pull requests and pushes to `main`. It automatically executes:
+- TypeScript compilation & type safety (`npm run typecheck`)
+- ESLint code quality checks (`npm run lint`)
+- Vitest security unit & integration test suites (`npm test`)
+- Data consistency & badge invariants (`npm run test:consistency`, `test:badge`, `test:reports`, `test:transparency`)
+- Next.js production build validation (`npm run build`)
+
+Weekly automated dependency scanning is configured via Dependabot (`.github/dependabot.yml`).
+
+### 5. Start Development Server
 ```bash
 npm run dev
 ```

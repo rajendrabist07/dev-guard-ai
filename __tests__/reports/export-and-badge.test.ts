@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { generateBadgeSvg } from '@/lib/badge/svg';
 import { generateMarkdownReport, ReportData } from '@/lib/reports/export';
 

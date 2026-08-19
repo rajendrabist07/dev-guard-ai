@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { scanDependencies } from '@/lib/agent/tools/deps-scan';
 
 describe('Dependency Vulnerability Scanner (lib/agent/tools/deps-scan.ts)', () => {

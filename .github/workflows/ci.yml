@@ -1,0 +1,50 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-and-verify:
+    name: Build, Lint & Automated Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Typecheck
+        run: npm run typecheck
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Run Automated Vitest Suites
+        run: npm test
+
+      - name: Verify Data Consistency Invariants
+        run: npm run test:consistency
+        env:
+          NEXT_PUBLIC_GITHUB_APP_INSTALL_URL: 'https://github.com/apps/devguard-agent/installations/new'
+
+      - name: Verify Badge & Report Suites
+        run: |
+          npm run test:badge
+          npm run test:reports
+          npm run test:transparency
+
+      - name: Run Production Next.js Build
+        run: npm run build
+        env:
+          NEXT_PUBLIC_GITHUB_APP_INSTALL_URL: 'https://github.com/apps/devguard-agent/installations/new'
