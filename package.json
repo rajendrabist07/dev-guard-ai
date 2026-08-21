@@ -18,7 +18,7 @@
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "@octokit/auth-app": "^7.1.1",
-    "@octokit/rest": "^21.1.1",
+    "@octokit/rest": "^22.0.1",
     "@octokit/webhooks-methods": "^6.0.0",
     "@sentry/nextjs": "^10.70.0",
     "@supabase/supabase-js": "^2.48.1",
