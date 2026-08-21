@@ -29,15 +29,38 @@ function toRecord(value: unknown): Record<string, unknown> {
   return JSON.parse(JSON.stringify(value)) as Record<string, unknown>;
 }
 
+function isDocsOnlyDiff(fileNames: string[], diff: string): boolean {
+  if (fileNames.length > 0 && fileNames.every((f) => /\.(md|markdown|txt|rst|adoc)$/i.test(f) || f.startsWith('.github/') || f === 'LICENSE')) {
+    return true;
+  }
+  // Check diff header paths if fileNames is empty
+  const hasOnlyDocHeaders = diff.includes('--- a/') && !diff.match(/--- a\/[^\n]+\.(ts|tsx|js|jsx|json|mjs|cjs|py|go|rs|java|rb|php)/i);
+  return hasOnlyDocHeaders;
+}
+
+function shouldRunLinter(diff: string, fileNames: string[]): boolean {
+  if (isDocsOnlyDiff(fileNames, diff)) return false;
+  // If the only modified file is package.json or lockfile, let scanDependencies handle it
+  if (fileNames.length > 0 && fileNames.every((f) => f.endsWith('package.json') || f.endsWith('package-lock.json') || f.endsWith('yarn.lock') || f.endsWith('pnpm-lock.yaml'))) {
+    return false;
+  }
+  return fileNames.some((f) => /\.(ts|tsx|js|jsx|mjs|cjs|json)$/i.test(f)) || /\+\s*(const|let|var|function|import|export|SELECT|fetch|await|<)/i.test(diff);
+}
+
 function shouldScanDependencies(diff: string, fileNames: string[]): boolean {
+  if (isDocsOnlyDiff(fileNames, diff)) return false;
   return (
     fileNames.some((fileName) => fileName.endsWith('package.json')) ||
     /dependencies|devDependencies|"axios"|"lodash"|"express"|"stripe"|"jsonwebtoken"|"minimist"/.test(diff)
   );
 }
 
-function shouldRunTests(diff: string): boolean {
-  return /api|route|auth|checkout|payment|test|spec/.test(diff);
+function shouldRunTests(diff: string, fileNames: string[] = []): boolean {
+  if (isDocsOnlyDiff(fileNames, diff)) return false;
+  // Match test files or core execution routes (api routes, checkout, auth endpoints)
+  const isTestOrApiFile = fileNames.some((f) => /test|spec|app\/api|routes?\/|checkout|auth/i.test(f));
+  const hasRouteOrTestCode = /(describe\(|it\(|test\(|expect\(|export async function (GET|POST|PUT|DELETE)|handleCheckout|runTests)/i.test(diff);
+  return isTestOrApiFile || hasRouteOrTestCode;
 }
 
 /**
@@ -79,28 +102,35 @@ export async function runAgentOrchestrator(
   };
 
   // Step 1: AST Linter
-  if (onProgress) {
-    await onProgress({
-      step: 1,
-      totalSteps,
-      message: 'Analyzing code structure & executing AST Linter...',
-      tool: 'runLinter',
-    });
-  }
+  let lintSummary = 'AST Linter skipped (non-code diff)';
+  let lintCount = 0;
 
-  const lintResult = await runLinter(fileNames, prDiff);
-  recordTrace('runLinter', { files: fileNames }, toRecord(lintResult));
+  if (trace.length < MAX_ITERATIONS && shouldRunLinter(prDiff, fileNames)) {
+    if (onProgress) {
+      await onProgress({
+        step: 1,
+        totalSteps,
+        message: 'Analyzing code structure & executing AST Linter...',
+        tool: 'runLinter',
+      });
+    }
 
-  for (const item of lintResult.items) {
-    findings.push({
-      review_run_id: reviewRunId,
-      severity: item.severity,
-      file_path: item.file,
-      line: item.line,
-      message: item.message,
-      suggested_fix: item.suggestedFix ?? null,
-      tool_source: 'runLinter',
-    });
+    const lintResult = await runLinter(fileNames, prDiff);
+    recordTrace('runLinter', { files: fileNames }, toRecord(lintResult));
+    lintSummary = lintResult.summary;
+    lintCount = lintResult.items.length;
+
+    for (const item of lintResult.items) {
+      findings.push({
+        review_run_id: reviewRunId,
+        severity: item.severity,
+        file_path: item.file,
+        line: item.line,
+        message: item.message,
+        suggested_fix: item.suggestedFix ?? null,
+        tool_source: 'runLinter',
+      });
+    }
   }
 
   // Step 2: Dependency Scan
@@ -175,7 +205,7 @@ export async function runAgentOrchestrator(
   }
 
   const toolOutputs = [
-    { tool: 'runLinter', summary: lintResult.summary, findingsCount: lintResult.items.length },
+    { tool: 'runLinter', summary: lintSummary, findingsCount: lintCount },
     { tool: 'scanDependencies', summary: depsSummary, findingsCount: findings.filter((f) => f.tool_source === 'scanDependencies').length },
     { tool: 'runTests', summary: testSummary, findingsCount: findings.filter((f) => f.tool_source === 'runTests').length },
   ];

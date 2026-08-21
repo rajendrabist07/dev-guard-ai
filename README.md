@@ -182,8 +182,9 @@ SUPABASE_SERVICE_KEY=your_service_role_key
 
 ### 3. Run Automated Invariant & Quality Test Suites
 ```bash
-npm test                   # Runs Vitest unit & integration test suite (27 passing tests)
+npm test                   # Runs Vitest unit & integration test suite (35 passing tests)
 npm run test:coverage      # Generates v8 code coverage report
+npm run eval               # Executes 20-case agent tool-selection precision & cost-efficiency eval suite
 npm run test:consistency   # Tests 0-findings/0-runs data invariants across consecutive queries
 npm run test:reports       # Validates multi-finding & clean PDF/Markdown generation
 npm run test:transparency  # Verifies real tool reasoning trace & LLM model attribution

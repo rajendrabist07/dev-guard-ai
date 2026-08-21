@@ -44,6 +44,9 @@ jobs:
           npm run test:reports
           npm run test:transparency
 
+      - name: Run Tool-Selection Accuracy Eval Suite
+        run: npm run eval
+
       - name: Run Production Next.js Build
         run: npm run build
         env:

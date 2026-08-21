@@ -1,0 +1,182 @@
+[
+  {
+    "id": "case-01-vulnerable-dep-axios",
+    "description": "Package manifest introducing known vulnerable Axios 0.19.0 (SSRF CVE)",
+    "files": ["package.json"],
+    "diff": "--- a/package.json\n+++ b/package.json\n@@ -10,3 +10,4 @@\n   \"dependencies\": {\n+    \"axios\": \"0.19.0\"\n   }",
+    "expected_tools_called": ["scanDependencies"],
+    "expected_severity": "critical",
+    "expected_flags": ["CVE-2020-28168", "SSRF"]
+  },
+  {
+    "id": "case-02-vulnerable-dep-lodash",
+    "description": "Package manifest introducing prototype-pollution vulnerable Lodash 4.17.15",
+    "files": ["package.json"],
+    "diff": "--- a/package.json\n+++ b/package.json\n@@ -15,3 +15,4 @@\n   \"dependencies\": {\n+    \"lodash\": \"4.17.15\"\n   }",
+    "expected_tools_called": ["scanDependencies"],
+    "expected_severity": "warning",
+    "expected_flags": ["CVE-2020-8203", "Prototype Pollution"]
+  },
+  {
+    "id": "case-03-vulnerable-dep-minimist",
+    "description": "Package manifest with vulnerable minimist 0.0.8",
+    "files": ["package.json"],
+    "diff": "--- a/package.json\n+++ b/package.json\n@@ -5,3 +5,4 @@\n+    \"minimist\": \"0.0.8\"\n   }",
+    "expected_tools_called": ["scanDependencies"],
+    "expected_severity": "warning",
+    "expected_flags": ["CVE-2021-44906"]
+  },
+  {
+    "id": "case-04-docs-readme-only",
+    "description": "Documentation only update to README.md (Cost-Efficiency Test: 0 tools should run)",
+    "files": ["README.md"],
+    "diff": "--- a/README.md\n+++ b/README.md\n@@ -1,5 +1,6 @@\n # DevGuard AI\n+Updated documentation on how to configure environment variables locally.",
+    "expected_tools_called": [],
+    "expected_severity": "none",
+    "expected_flags": []
+  },
+  {
+    "id": "case-05-docs-contributing-only",
+    "description": "Documentation update to CONTRIBUTING.md (Cost-Efficiency Test: 0 tools should run)",
+    "files": ["CONTRIBUTING.md"],
+    "diff": "--- a/CONTRIBUTING.md\n+++ b/CONTRIBUTING.md\n@@ -10,3 +10,4 @@\n+Please remember to run npm test before opening PRs.",
+    "expected_tools_called": [],
+    "expected_severity": "none",
+    "expected_flags": []
+  },
+  {
+    "id": "case-06-docs-changelog-only",
+    "description": "Changelog entry addition (Cost-Efficiency Test: 0 tools should run)",
+    "files": ["CHANGELOG.md"],
+    "diff": "--- a/CHANGELOG.md\n+++ b/CHANGELOG.md\n@@ -4,3 +4,4 @@\n+## [1.3.0] - Added new telemetry dashboard.",
+    "expected_tools_called": [],
+    "expected_severity": "none",
+    "expected_flags": []
+  },
+  {
+    "id": "case-07-sqli-string-concat",
+    "description": "Unsanitized direct SQL query string concatenation",
+    "files": ["app/api/users/route.ts"],
+    "diff": "--- a/app/api/users/route.ts\n+++ b/app/api/users/route.ts\n@@ -12,3 +12,5 @@\n export async function GET(req: Request) {\n+  const id = req.url.split('?id=')[1];\n+  const user = await db.query(\"SELECT * FROM users WHERE id = '\" + id + \"'\");\n+  return Response.json(user);\n }",
+    "expected_tools_called": ["runLinter", "runTests"],
+    "expected_severity": "critical",
+    "expected_flags": ["security/no-unsafe-sql-query"]
+  },
+  {
+    "id": "case-08-sqli-template-literal",
+    "description": "SQL query with unsanitized template literal interpolation",
+    "files": ["lib/db/accounts.ts"],
+    "diff": "--- a/lib/db/accounts.ts\n+++ b/lib/db/accounts.ts\n@@ -20,3 +20,4 @@\n+  const query = `SELECT * FROM accounts WHERE email = '${email}'`;\n+  return await db.execute(query);",
+    "expected_tools_called": ["runLinter"],
+    "expected_severity": "critical",
+    "expected_flags": ["security/no-unsafe-sql-query"]
+  },
+  {
+    "id": "case-09-xss-dangerous-innerhtml",
+    "description": "Direct unsanitized HTML rendering via dangerouslySetInnerHTML",
+    "files": ["components/CommentView.tsx"],
+    "diff": "--- a/components/CommentView.tsx\n+++ b/components/CommentView.tsx\n@@ -8,3 +8,4 @@\n export function CommentView({ body }: { body: string }) {\n+  return <div dangerouslySetInnerHTML={{ __html: body }} />;\n }",
+    "expected_tools_called": ["runLinter"],
+    "expected_severity": "critical",
+    "expected_flags": ["security/no-eval-xss"]
+  },
+  {
+    "id": "case-10-xss-eval-execution",
+    "description": "Dynamic arbitrary JavaScript execution via eval()",
+    "files": ["lib/evaluator.ts"],
+    "diff": "--- a/lib/evaluator.ts\n+++ b/lib/evaluator.ts\n@@ -5,3 +5,4 @@\n export function evaluateFormula(formula: string) {\n+  return eval(formula);\n }",
+    "expected_tools_called": ["runLinter"],
+    "expected_severity": "critical",
+    "expected_flags": ["security/no-eval-xss"]
+  },
+  {
+    "id": "case-11-hardcoded-secret-token",
+    "description": "Hardcoded secret token string in source code",
+    "files": ["lib/auth.ts"],
+    "diff": "--- a/lib/auth.ts\n+++ b/lib/auth.ts\n@@ -2,3 +2,4 @@\n+const token = 'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890';\n export function getAuth() { return token; }",
+    "expected_tools_called": ["runLinter"],
+    "expected_severity": "critical",
+    "expected_flags": ["security/no-hardcoded-credentials"]
+  },
+  {
+    "id": "case-12-hardcoded-api-key",
+    "description": "Hardcoded API key assignment in source code",
+    "files": ["lib/clients/cloud.ts"],
+    "diff": "--- a/lib/clients/cloud.ts\n+++ b/lib/clients/cloud.ts\n@@ -4,3 +4,4 @@\n+const apiKey = 'AIzaSyA1234567890abcdefghijklmnopqrstuv';\n export const client = new CloudClient({ apiKey });",
+    "expected_tools_called": ["runLinter"],
+    "expected_severity": "critical",
+    "expected_flags": ["security/no-hardcoded-credentials"]
+  },
+  {
+    "id": "case-13-unhandled-promise-fetch",
+    "description": "Unhandled async Promise rejection without try/catch block",
+    "files": ["lib/sync/webhook.ts"],
+    "diff": "--- a/lib/sync/webhook.ts\n+++ b/lib/sync/webhook.ts\n@@ -10,3 +10,4 @@\n export async function notify() {\n+  const res = await fetch('https://hooks.slack.com/services/xyz');\n   return res.status;\n }",
+    "expected_tools_called": ["runLinter"],
+    "expected_severity": "warning",
+    "expected_flags": ["promise/catch-or-return"]
+  },
+  {
+    "id": "case-14-unused-variable-declaration",
+    "description": "Unused declared variable (minor quality issue)",
+    "files": ["lib/math/stats.ts"],
+    "diff": "--- a/lib/math/stats.ts\n+++ b/lib/math/stats.ts\n@@ -1,3 +1,4 @@\n+const unusedCalibrationFactor = 1.05;\n export function mean(arr: number[]) { return arr.reduce((a,b)=>a+b,0)/arr.length; }",
+    "expected_tools_called": ["runLinter"],
+    "expected_severity": "warning",
+    "expected_flags": ["eslint/no-unused-vars"]
+  },
+  {
+    "id": "case-15-clean-code-simple-math",
+    "description": "Clean, safe mathematical function with zero vulnerabilities",
+    "files": ["lib/math/calculator.ts"],
+    "diff": "--- a/lib/math/calculator.ts\n+++ b/lib/math/calculator.ts\n@@ -1,3 +1,6 @@\n+export function add(a: number, b: number): number {\n+  return a + b;\n+}",
+    "expected_tools_called": ["runLinter"],
+    "expected_severity": "none",
+    "expected_flags": []
+  },
+  {
+    "id": "case-16-clean-code-ui-component",
+    "description": "Clean React UI component rendering text safely",
+    "files": ["components/Button.tsx"],
+    "diff": "--- a/components/Button.tsx\n+++ b/components/Button.tsx\n@@ -1,3 +1,7 @@\n+export function PrimaryButton({ label, onClick }: { label: string; onClick: () => void }) {\n+  return <button onClick={onClick} className=\"px-4 py-2 bg-blue-600 text-white rounded\">{label}</button>;\n+}",
+    "expected_tools_called": ["runLinter"],
+    "expected_severity": "none",
+    "expected_flags": []
+  },
+  {
+    "id": "case-17-multi-file-full-stack",
+    "description": "Full-stack feature touching API route, AST vulnerability and package.json",
+    "files": ["app/api/checkout/route.ts", "package.json"],
+    "diff": "--- a/app/api/checkout/route.ts\n+++ b/app/api/checkout/route.ts\n@@ -1,3 +1,5 @@\n+export async function POST(req: Request) {\n+  const query = \"SELECT * FROM users WHERE id = '\" + userId + \"'\";\n+}\n--- a/package.json\n+++ b/package.json\n@@ -10,3 +10,4 @@\n+    \"axios\": \"0.19.0\"",
+    "expected_tools_called": ["runLinter", "scanDependencies", "runTests"],
+    "expected_severity": "critical",
+    "expected_flags": ["security/no-unsafe-sql-query", "CVE-2020-28168"]
+  },
+  {
+    "id": "case-18-clean-package-json",
+    "description": "Package manifest updated with modern safe dependencies",
+    "files": ["package.json"],
+    "diff": "--- a/package.json\n+++ b/package.json\n@@ -10,3 +10,5 @@\n   \"dependencies\": {\n+    \"next\": \"^15.1.0\",\n+    \"react\": \"^19.0.0\"\n   }",
+    "expected_tools_called": ["scanDependencies"],
+    "expected_severity": "none",
+    "expected_flags": []
+  },
+  {
+    "id": "case-19-checkout-endpoint-test-trigger",
+    "description": "Payment checkout route triggering unit test assertions",
+    "files": ["app/api/checkout/pay.ts"],
+    "diff": "--- a/app/api/checkout/pay.ts\n+++ b/app/api/checkout/pay.ts\n@@ -1,3 +1,5 @@\n+export async function handleCheckout(req: Request) {\n+  const query = \"SELECT * FROM checkout WHERE userId = '\" + req.url + \"'\";\n+}",
+    "expected_tools_called": ["runLinter", "runTests"],
+    "expected_severity": "critical",
+    "expected_flags": ["AssertionError", "security/no-unsafe-sql-query"]
+  },
+  {
+    "id": "case-20-clean-tailwind-config",
+    "description": "Clean configuration update with safe CSS formatting",
+    "files": ["tailwind.config.ts"],
+    "diff": "--- a/tailwind.config.ts\n+++ b/tailwind.config.ts\n@@ -1,3 +1,5 @@\n+export default {\n+  darkMode: 'class',\n+};",
+    "expected_tools_called": ["runLinter"],
+    "expected_severity": "none",
+    "expected_flags": []
+  }
+]

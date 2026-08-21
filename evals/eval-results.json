@@ -1,0 +1,369 @@
+{
+  "timestamp": "2026-08-21T13:13:31.903Z",
+  "total_cases": 20,
+  "tool_selection_precision": 100,
+  "tool_selection_recall": 100,
+  "tool_selection_f1": 100,
+  "severity_accuracy": 100,
+  "wasted_tool_call_rate": 0,
+  "docs_efficiency_pass": true,
+  "total_duration_ms": 2142,
+  "case_results": [
+    {
+      "id": "case-01-vulnerable-dep-axios",
+      "description": "Package manifest introducing known vulnerable Axios 0.19.0 (SSRF CVE)",
+      "expected_tools": [
+        "scanDependencies"
+      ],
+      "actual_tools": [
+        "scanDependencies"
+      ],
+      "tool_precision": 1,
+      "tool_recall": 1,
+      "wasted_tools": [],
+      "expected_severity": "critical",
+      "actual_severity": "critical",
+      "severity_matched": true,
+      "actual_findings_count": 1,
+      "duration_ms": 1103
+    },
+    {
+      "id": "case-02-vulnerable-dep-lodash",
+      "description": "Package manifest introducing prototype-pollution vulnerable Lodash 4.17.15",
+      "expected_tools": [
+        "scanDependencies"
+      ],
+      "actual_tools": [
+        "scanDependencies"
+      ],
+      "tool_precision": 1,
+      "tool_recall": 1,
+      "wasted_tools": [],
+      "expected_severity": "warning",
+      "actual_severity": "warning",
+      "severity_matched": true,
+      "actual_findings_count": 1,
+      "duration_ms": 0
+    },
+    {
+      "id": "case-03-vulnerable-dep-minimist",
+      "description": "Package manifest with vulnerable minimist 0.0.8",
+      "expected_tools": [
+        "scanDependencies"
+      ],
+      "actual_tools": [
+        "scanDependencies"
+      ],
+      "tool_precision": 1,
+      "tool_recall": 1,
+      "wasted_tools": [],
+      "expected_severity": "warning",
+      "actual_severity": "warning",
+      "severity_matched": true,
+      "actual_findings_count": 1,
+      "duration_ms": 0
+    },
+    {
+      "id": "case-04-docs-readme-only",
+      "description": "Documentation only update to README.md (Cost-Efficiency Test: 0 tools should run)",
+      "expected_tools": [],
+      "actual_tools": [],
+      "tool_precision": 1,
+      "tool_recall": 1,
+      "wasted_tools": [],
+      "expected_severity": "none",
+      "actual_severity": "none",
+      "severity_matched": true,
+      "actual_findings_count": 0,
+      "duration_ms": 0
+    },
+    {
+      "id": "case-05-docs-contributing-only",
+      "description": "Documentation update to CONTRIBUTING.md (Cost-Efficiency Test: 0 tools should run)",
+      "expected_tools": [],
+      "actual_tools": [],
+      "tool_precision": 1,
+      "tool_recall": 1,
+      "wasted_tools": [],
+      "expected_severity": "none",
+      "actual_severity": "none",
+      "severity_matched": true,
+      "actual_findings_count": 0,
+      "duration_ms": 0
+    },
+    {
+      "id": "case-06-docs-changelog-only",
+      "description": "Changelog entry addition (Cost-Efficiency Test: 0 tools should run)",
+      "expected_tools": [],
+      "actual_tools": [],
+      "tool_precision": 1,
+      "tool_recall": 1,
+      "wasted_tools": [],
+      "expected_severity": "none",
+      "actual_severity": "none",
+      "severity_matched": true,
+      "actual_findings_count": 0,
+      "duration_ms": 0
+    },
+    {
+      "id": "case-07-sqli-string-concat",
+      "description": "Unsanitized direct SQL query string concatenation",
+      "expected_tools": [
+        "runLinter",
+        "runTests"
+      ],
+      "actual_tools": [
+        "runLinter",
+        "runTests"
+      ],
+      "tool_precision": 1,
+      "tool_recall": 1,
+      "wasted_tools": [],
+      "expected_severity": "critical",
+      "actual_severity": "critical",
+      "severity_matched": true,
+      "actual_findings_count": 2,
+      "duration_ms": 1
+    },
+    {
+      "id": "case-08-sqli-template-literal",
+      "description": "SQL query with unsanitized template literal interpolation",
+      "expected_tools": [
+        "runLinter"
+      ],
+      "actual_tools": [
+        "runLinter"
+      ],
+      "tool_precision": 1,
+      "tool_recall": 1,
+      "wasted_tools": [],
+      "expected_severity": "critical",
+      "actual_severity": "critical",
+      "severity_matched": true,
+      "actual_findings_count": 1,
+      "duration_ms": 0
+    },
+    {
+      "id": "case-09-xss-dangerous-innerhtml",
+      "description": "Direct unsanitized HTML rendering via dangerouslySetInnerHTML",
+      "expected_tools": [
+        "runLinter"
+      ],
+      "actual_tools": [
+        "runLinter"
+      ],
+      "tool_precision": 1,
+      "tool_recall": 1,
+      "wasted_tools": [],
+      "expected_severity": "critical",
+      "actual_severity": "critical",
+      "severity_matched": true,
+      "actual_findings_count": 1,
+      "duration_ms": 0
+    },
+    {
+      "id": "case-10-xss-eval-execution",
+      "description": "Dynamic arbitrary JavaScript execution via eval()",
+      "expected_tools": [
+        "runLinter"
+      ],
+      "actual_tools": [
+        "runLinter"
+      ],
+      "tool_precision": 1,
+      "tool_recall": 1,
+      "wasted_tools": [],
+      "expected_severity": "critical",
+      "actual_severity": "critical",
+      "severity_matched": true,
+      "actual_findings_count": 1,
+      "duration_ms": 0
+    },
+    {
+      "id": "case-11-hardcoded-secret-token",
+      "description": "Hardcoded secret token string in source code",
+      "expected_tools": [
+        "runLinter"
+      ],
+      "actual_tools": [
+        "runLinter"
+      ],
+      "tool_precision": 1,
+      "tool_recall": 1,
+      "wasted_tools": [],
+      "expected_severity": "critical",
+      "actual_severity": "critical",
+      "severity_matched": true,
+      "actual_findings_count": 1,
+      "duration_ms": 0
+    },
+    {
+      "id": "case-12-hardcoded-api-key",
+      "description": "Hardcoded API key assignment in source code",
+      "expected_tools": [
+        "runLinter"
+      ],
+      "actual_tools": [
+        "runLinter"
+      ],
+      "tool_precision": 1,
+      "tool_recall": 1,
+      "wasted_tools": [],
+      "expected_severity": "critical",
+      "actual_severity": "critical",
+      "severity_matched": true,
+      "actual_findings_count": 2,
+      "duration_ms": 0
+    },
+    {
+      "id": "case-13-unhandled-promise-fetch",
+      "description": "Unhandled async Promise rejection without try/catch block",
+      "expected_tools": [
+        "runLinter"
+      ],
+      "actual_tools": [
+        "runLinter"
+      ],
+      "tool_precision": 1,
+      "tool_recall": 1,
+      "wasted_tools": [],
+      "expected_severity": "warning",
+      "actual_severity": "warning",
+      "severity_matched": true,
+      "actual_findings_count": 1,
+      "duration_ms": 0
+    },
+    {
+      "id": "case-14-unused-variable-declaration",
+      "description": "Unused declared variable (minor quality issue)",
+      "expected_tools": [
+        "runLinter"
+      ],
+      "actual_tools": [
+        "runLinter"
+      ],
+      "tool_precision": 1,
+      "tool_recall": 1,
+      "wasted_tools": [],
+      "expected_severity": "warning",
+      "actual_severity": "warning",
+      "severity_matched": true,
+      "actual_findings_count": 1,
+      "duration_ms": 1
+    },
+    {
+      "id": "case-15-clean-code-simple-math",
+      "description": "Clean, safe mathematical function with zero vulnerabilities",
+      "expected_tools": [
+        "runLinter"
+      ],
+      "actual_tools": [
+        "runLinter"
+      ],
+      "tool_precision": 1,
+      "tool_recall": 1,
+      "wasted_tools": [],
+      "expected_severity": "none",
+      "actual_severity": "none",
+      "severity_matched": true,
+      "actual_findings_count": 0,
+      "duration_ms": 0
+    },
+    {
+      "id": "case-16-clean-code-ui-component",
+      "description": "Clean React UI component rendering text safely",
+      "expected_tools": [
+        "runLinter"
+      ],
+      "actual_tools": [
+        "runLinter"
+      ],
+      "tool_precision": 1,
+      "tool_recall": 1,
+      "wasted_tools": [],
+      "expected_severity": "none",
+      "actual_severity": "none",
+      "severity_matched": true,
+      "actual_findings_count": 0,
+      "duration_ms": 0
+    },
+    {
+      "id": "case-17-multi-file-full-stack",
+      "description": "Full-stack feature touching API route, AST vulnerability and package.json",
+      "expected_tools": [
+        "runLinter",
+        "scanDependencies",
+        "runTests"
+      ],
+      "actual_tools": [
+        "runLinter",
+        "scanDependencies",
+        "runTests"
+      ],
+      "tool_precision": 1,
+      "tool_recall": 1,
+      "wasted_tools": [],
+      "expected_severity": "critical",
+      "actual_severity": "critical",
+      "severity_matched": true,
+      "actual_findings_count": 3,
+      "duration_ms": 1033
+    },
+    {
+      "id": "case-18-clean-package-json",
+      "description": "Package manifest updated with modern safe dependencies",
+      "expected_tools": [
+        "scanDependencies"
+      ],
+      "actual_tools": [
+        "scanDependencies"
+      ],
+      "tool_precision": 1,
+      "tool_recall": 1,
+      "wasted_tools": [],
+      "expected_severity": "none",
+      "actual_severity": "none",
+      "severity_matched": true,
+      "actual_findings_count": 0,
+      "duration_ms": 0
+    },
+    {
+      "id": "case-19-checkout-endpoint-test-trigger",
+      "description": "Payment checkout route triggering unit test assertions",
+      "expected_tools": [
+        "runLinter",
+        "runTests"
+      ],
+      "actual_tools": [
+        "runLinter",
+        "runTests"
+      ],
+      "tool_precision": 1,
+      "tool_recall": 1,
+      "wasted_tools": [],
+      "expected_severity": "critical",
+      "actual_severity": "critical",
+      "severity_matched": true,
+      "actual_findings_count": 2,
+      "duration_ms": 0
+    },
+    {
+      "id": "case-20-clean-tailwind-config",
+      "description": "Clean configuration update with safe CSS formatting",
+      "expected_tools": [
+        "runLinter"
+      ],
+      "actual_tools": [
+        "runLinter"
+      ],
+      "tool_precision": 1,
+      "tool_recall": 1,
+      "wasted_tools": [],
+      "expected_severity": "none",
+      "actual_severity": "none",
+      "severity_matched": true,
+      "actual_findings_count": 0,
+      "duration_ms": 0
+    }
+  ]
+}
