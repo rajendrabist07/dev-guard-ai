@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-08-21T13:25:07.021Z",
+  "timestamp": "2026-08-21T13:27:30.311Z",
   "total_cases": 20,
   "tool_selection_precision": 100,
   "tool_selection_recall": 100,
@@ -7,7 +7,7 @@
   "severity_accuracy": 100,
   "wasted_tool_call_rate": 0,
   "docs_efficiency_pass": true,
-  "total_duration_ms": 1108,
+  "total_duration_ms": 1165,
   "case_results": [
     {
       "id": "case-01-vulnerable-dep-axios",
@@ -25,7 +25,7 @@
       "actual_severity": "critical",
       "severity_matched": true,
       "actual_findings_count": 1,
-      "duration_ms": 1105
+      "duration_ms": 1162
     },
     {
       "id": "case-02-vulnerable-dep-lodash",
@@ -307,7 +307,7 @@
       "actual_severity": "critical",
       "severity_matched": true,
       "actual_findings_count": 3,
-      "duration_ms": 0
+      "duration_ms": 1
     },
     {
       "id": "case-18-clean-package-json",
@@ -345,7 +345,7 @@
       "actual_severity": "critical",
       "severity_matched": true,
       "actual_findings_count": 2,
-      "duration_ms": 1
+      "duration_ms": 0
     },
     {
       "id": "case-20-clean-tailwind-config",

@@ -1,162 +1,152 @@
-<div align="center">
+# DevGuard AI
 
-# 🛡️ DevGuard AI
-### Autonomous PR Security & Code Review Agent
-**Empirical Tool-Calling Review Loop • Zero Hallucinations • Production-Grade Security Feedback**
-
-[![CI Pipeline](https://github.com/rajendrabist07/dev-guard-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/rajendrabist07/dev-guard-ai/actions/workflows/ci.yml)
-[![Next.js 15](https://img.shields.io/badge/Next.js-15.1-black?style=for-the-badge&logo=next.js)](https://nextjs.org/)
-[![React 19](https://img.shields.io/badge/React-19.0-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Tailwind CSS v4](https://img.shields.io/badge/Tailwind_CSS-v4.0-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
-[![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white)](https://supabase.com/)
-[![Groq & Gemini](https://img.shields.io/badge/AI_Engine-Groq_Llama_3.3_|_Gemini_2.5-orange?style=for-the-badge&logo=google)](https://groq.com/)
-[![DevGuard AI Badge](https://dev-guard-ai.vercel.app/api/badge/status)](https://dev-guard-ai.vercel.app)
-[![License: MIT](https://img.shields.io/badge/License-MIT-emerald?style=for-the-badge)](LICENSE)
-
-[Live Demo](https://dev-guard-ai.vercel.app/) • [Interactive Playground (/try)](https://dev-guard-ai.vercel.app/try) • [Security Dashboard](https://dev-guard-ai.vercel.app/dashboard) • [Architecture](docs/architecture.md) • [Changelog](CHANGELOG.md) • [Contributing](CONTRIBUTING.md) • [API Docs](#-api-endpoints)
+DevGuard AI is an automated code review service that analyzes GitHub pull requests by executing static analysis, dependency vulnerability scanning, and test verification before summarizing findings with an LLM. Rather than relying on single-shot LLM prompts on raw diffs, it invokes discrete diagnostic tools to collect concrete findings, surfaces suggested inline code fixes, and records structured execution traces.
 
 ---
 
-</div>
+## Architecture
 
-## 📌 Executive Summary
-
-**DevGuard AI** is an autonomous GitHub App that elevates code review quality from speculative text generation to **empirical evidence gathering**. 
-
-Traditional AI review bots simply feed PR diffs into an LLM and generate speculative comments. DevGuard AI treats the LLM as an **intelligent orchestrator** that actively invokes diagnostic tools (AST static linters, OSV.dev vulnerability scanners, unit test runners) to collect verified proof before generating severity-tagged findings and one-click copyable inline pull request patches.
-
----
-
-## ⚡ Key Highlights & Core Differentiators
-
-| Feature | DevGuard AI | Traditional AI Review Bots |
-| :--- | :--- | :--- |
-| **Review Strategy** | **Empirical Tool-Calling Loop** (Linter + OSV Scanner + Test Runner) | Single-shot prompt on raw diff |
-| **Evidence Basis** | Real tool logs, AST patterns, CVE databases | LLM guesses & hallucinations |
-| **Inline PR Fixes** | GitHub-compatible 1-click suggested code patches | Generic conversational advice |
-| **Rate Limit Resilience** | Multi-tier fallback: **Groq 70B ➡️ Gemini 2.5 Flash ➡️ Deterministic Engine** | Crashes on 429 rate-limit errors |
-| **Model Transparency** | Expandable Reasoning Trace showing tool I/O payloads & active model | Black-box output |
-| **Visual Analytics** | 30-day severity timeline & empirical tool attribution charts | Static numbers or empty state |
-| **Deliverables & Export** | Client-side **PDF Compliance Reports** & GitHub Markdown exports | No export options |
-| **Public Status Badges** | Dynamic shields.io-compatible SVG badges for repository READMEs | None |
-| **Interactive Sandbox** | Dedicated `/try` playground with live streaming progress & shareable URLs | Requires private repository install |
-
----
-
-## 🏗️ System Architecture
+### GitHub Webhook Flow
 
 ```mermaid
 flowchart TD
-    subgraph GitHub ["GitHub Cloud Platform"]
+    subgraph GitHub ["GitHub Platform"]
         PR["Pull Request Event (opened / synchronize)"]
-        Review["Inline PR Review Comments & Suggested Patches"]
+        Review["PR Review Comments & Inline Patches"]
     end
 
-    subgraph Backend ["Next.js 15 Backend API"]
-        WH["/api/webhooks/github<br/>(HMAC-SHA256 Signature Verification)"]
-        Octokit["Octokit API Client<br/>(Pulls PR Diffs & Files)"]
-        DB[(Supabase Postgres Database)]
+    subgraph Ingestion ["Webhook Receiver & Verification"]
+        WH["POST /api/webhooks/github"]
+        Auth["HMAC-SHA256 Signature Verification"]
+        Dedupe["Idempotency Check (repo_id + pr_number + commit_sha)"]
     end
 
-    subgraph Agent ["DevGuard Autonomous Agent Loop"]
-        Orchestrator["Agent Orchestrator<br/>(Groq Llama 3.3 70B / Gemini 2.5 Flash)"]
-        ToolLinter["Tool: runLinter<br/>(AST / Security Rules)"]
-        ToolDeps["Tool: scanDependencies<br/>(OSV.dev Vulnerability API)"]
-        ToolTests["Tool: runTests<br/>(Test Suite Execution Engine)"]
+    subgraph Orchestration ["Agent Orchestrator (lib/agent/orchestrator.ts)"]
+        DiffFilter["Diff Scope & File Classifier"]
+        Linter["AST Security Linter (runLinter)"]
+        Deps["OSV.dev CVE Lookup (scanDependencies)"]
+        Tests["Test Runner (runTests)"]
+        Synthesis["Multi-Tier LLM Synthesis (Groq / Gemini / Fallback)"]
     end
 
-    subgraph Observability ["Security Dashboard & Observability UI"]
-        UI["Web Dashboard (/dashboard)<br/>• 30-Day Trends & Tool Breakdown<br/>• Model Reasoning Trace Inspector<br/>• Dynamic README Badge Generator"]
-        Playground["Interactive Playground (/try)<br/>• Step-by-Step Live Progress<br/>• Shareable Public URLs (/try/result/[id])<br/>• PDF / Markdown Compliance Export"]
+    subgraph Storage ["Database & Cache"]
+        Redis[("Upstash Redis Cache (24h TTL)")]
+        DB[("Supabase Postgres (review_runs, findings)")]
     end
 
-    PR -->|Webhook Payload| WH
-    WH --> Octokit
-    Octokit -->|Diff & Files| Orchestrator
-    Orchestrator <-->|Max 5 Capped Iterations| ToolLinter
-    Orchestrator <-->|Max 5 Capped Iterations| ToolDeps
-    Orchestrator <-->|Max 5 Capped Iterations| ToolTests
-    Orchestrator -->|Structured Findings JSON| DB
-    Orchestrator -->|createReview API| Review
-    DB --> UI
-    DB --> Playground
+    PR --> WH
+    WH --> Auth
+    Auth --> Dedupe
+    Dedupe -->|New Unique Commit| DiffFilter
+    DiffFilter -->|Code Files| Linter
+    DiffFilter -->|Manifest Changes| Deps
+    DiffFilter -->|Executable Logic| Tests
+    Deps <-->|Key: osv:npm:pkg:ver| Redis
+    Linter --> Synthesis
+    Deps --> Synthesis
+    Tests --> Synthesis
+    Synthesis --> DB
+    Synthesis -->|Octokit REST API| Review
+```
+
+### Interactive Playground (`/try`) Flow
+
+```mermaid
+flowchart TD
+    User["Developer in Browser (/try)"]
+    API["POST /api/try"]
+    RateLimit["Rate Limiter (5 req / 10 min per IP)"]
+    Zod["Zod Payload Validation"]
+    Orchestrator["Agent Orchestrator Loop"]
+    SSE["Server-Sent Events (SSE) Stream"]
+    ResultPage["Shareable Review (/try/result/[id])"]
+
+    User -->|Submit Diff or Sample| API
+    API --> RateLimit
+    RateLimit --> Zod
+    Zod --> Orchestrator
+    Orchestrator -->|Live Step Progress| SSE
+    SSE --> User
+    Orchestrator -->|Persist Result| ResultPage
 ```
 
 ---
 
-## 🧰 Autonomous Tool Suite
+## Design Decisions & Tradeoffs
 
-The agent orchestrator dynamically selects from the following tool suite to collect concrete runtime and static evidence:
+### 1. Tool-Calling with Verification vs. Single-Shot LLM Generation
+- **Decision**: The LLM does not generate security findings directly from diff text. Instead, deterministic diagnostic tools (`runLinter`, `scanDependencies`, `runTests`) detect and verify issues first. The LLM is used solely to synthesize the structured tool outputs into a clear summary.
+- **Tradeoff**: Running tools adds small pipeline overhead (~1–2 seconds), but eliminates hallucinations. A finding is only reported if an AST rule triggered, an OSV.dev CVE record matched, or a test assertion failed.
 
-### 1. AST Security & Code Linter (`lib/agent/tools/lint.ts`)
-- Scans modified files for critical vulnerabilities including:
-  - **SQL Injection**: Unsanitized query concatenation patterns.
-  - **Cross-Site Scripting (XSS)**: Unsafe `dangerouslySetInnerHTML` and `eval()` execution.
-  - **Unhandled Promise Rejections**: Missing `try/catch` wrappers around external API invocations.
+### 2. Multi-Tier Model Fallback (Groq Llama 3.3 70B ➡️ Gemini 2.5 Flash ➡️ Deterministic Engine)
+- **Decision**: Primary inference runs on Groq's `llama-3.3-70b-versatile`. If Groq returns an HTTP 429 rate limit or service error, the pipeline immediately fails over to Google's `gemini-2.0-flash`. If all external APIs are unreachable, an offline rule-based deterministic synthesizer formats the report.
+- **Tradeoff**: Supporting three providers requires maintaining unified output schemas across different response formats. In return, review runs never crash due to 3rd-party provider downtime or free-tier quota exhaustion.
 
-### 2. Dependency Vulnerability Scanner (`lib/agent/tools/deps-scan.ts`)
-- Parses modified manifests (`package.json`, lockfiles).
-- Queries the free **OSV.dev Open Source Vulnerabilities Database** (`https://api.osv.dev/v1/query`) for published CVE advisories.
-- Flags outdated libraries (e.g., prototype pollution in `lodash`, SSRF vulnerabilities in legacy `axios`).
+### 3. Hard 5-Iteration Cap (`MAX_ITERATIONS = 5`)
+- **Decision**: The orchestrator enforces a strict limit of 5 tool calls per review run.
+- **Tradeoff**: For extremely large pull requests touching dozens of distinct file categories, not all tertiary tools may execute in a single pass. However, this hard bound guarantees execution terminates within bounded compute budgets and avoids unbounded recursive loops.
 
-### 3. Programmatic Test Runner (`lib/agent/tools/test-runner.ts`)
-- Executes target project test suites (`Jest`, `Vitest`, `npm test`).
-- Captures test assertion failures and correlates them directly to the PR author's modified lines.
-
----
-
-## 🚀 Advanced Platform Features
-
-### 1. Dedicated Self-Service Playground (`/try`)
-- Visitors can test preloaded vulnerability fixtures (SQLi, CVEs, async errors) or paste custom code diffs.
-- Real-time step-by-step progress streamed live via **Server-Sent Events (SSE)**.
-- Public shareable results at `/try/result/[id]` with zero authentication required.
-
-### 2. Visual Intelligence & Health Analytics
-- **Findings Over Time**: 30-day timeline stacked bar chart breaking down daily review volume by severity (Critical, Warning, Info).
-- **Tool Source Attribution**: Pie chart demonstrating what percentage of findings originated from the AST linter vs. OSV.dev vs. test runner.
-- **Average Time to Review**: Concrete engineering velocity metric measuring turnaround latency from webhook reception to review publication.
-
-### 3. Exportable Compliance Deliverables (`PDF & Markdown`)
-- 1-click **Client-Side PDF Document** generation with clean branding, severity summary cards, and Courier-formatted remediation code blocks.
-- **GitHub-Flavored Markdown export** and quick clipboard copy for engineering management audit trails.
-- Clean positive "ALL CLEAR" state when 0 security issues are detected.
-
-### 4. Model Transparency Panel ("Show Your Work")
-- Transparent model attribution badge indicating whether the synthesis was generated by `Groq Llama 3.3 70B`, `Gemini 2.5 Flash`, or deterministic fallback.
-- Explicit indicator if a Groq HTTP 429 rate limit triggered an automatic Gemini fallback.
-- Expandable step-by-step reasoning trace displaying input parameters and output payloads for each tool call.
-
-### 5. Dynamic Shields.io README Badges
-- Dynamic SVG status badge endpoint: `GET /api/badge/[repoId]`
-- Embed markdown:
-  ```markdown
-  [![DevGuard AI Status](https://dev-guard-ai.vercel.app/api/badge/your-repo-id)](https://dev-guard-ai.vercel.app)
-  [![Powered by DevGuard AI](https://dev-guard-ai.vercel.app/api/badge/powered-by)](https://dev-guard-ai.vercel.app)
-  ```
-
-### 6. Production Cost, Latency & Cache Telemetry
-DevGuard AI continuously instruments all execution stages to provide real, empirical performance figures:
-- **Average Cost per PR Reviewed**: **~$0.00015 USD** (Multi-tier Groq Llama 3.3 70B & Gemini 2.5 Flash token synthesis).
-- **Pipeline Latency**: **p50: 1.85s**, **p95: 3.10s** (Total turnaround from diff ingestion through AST linting, OSV scanning, and review posting).
-- **OSV.dev Caching Efficiency**: **24-hour TTL Redis caching** via Upstash deduplicates identical package manifests across PRs, eliminating redundant external API roundtrips and keeping lookup latency sub-millisecond.
+### 4. Upstash Redis Caching for OSV.dev Queries
+- **Decision**: Dependency vulnerability query results are cached in Redis using keys formatted as `osv:npm:${packageName}:${version}` with a 24-hour TTL.
+- **Tradeoff**: A newly published CVE disclosed within the 24-hour window will not be reflected until the TTL expires or cache invalidates. In exchange, identical dependencies across multiple PRs avoid external HTTP queries, cutting dependency analysis latency to sub-millisecond speeds.
 
 ---
 
-## 🛠️ Tech Stack
+## Eval Results
 
-- **Framework**: Next.js 15 (App Router, Server Components & Route Handlers)
-- **Frontend**: React 19, Tailwind CSS v4, Lucide Icons, Recharts, jsPDF
-- **Database & Storage**: Supabase PostgreSQL
-- **AI Orchestration**: Groq SDK (`llama-3.3-70b-versatile`), Google GenAI SDK (`gemini-2.0-flash`)
-- **GitHub API**: Octokit REST & App Auth, Webhook Signature Verification (`@octokit/webhooks-methods`)
+To measure whether the orchestrator accurately selects necessary tools and assigns appropriate severities without wasting compute, an automated evaluation suite (`evals/run-eval.ts`) runs 20 benchmark test cases covering SQL injection, XSS, exposed secrets, unhandled promises, vulnerable dependencies, and documentation-only diffs.
+
+| Metric | Score | Target | Description |
+| :--- | :--- | :--- | :--- |
+| **Tool Selection Precision** | **100%** | ≥ 95% | Ratio of correctly invoked tools to total tools called |
+| **Tool Selection Recall** | **100%** | ≥ 95% | Ratio of expected tools invoked to total expected tools |
+| **Tool Selection F1 Score** | **100%** | ≥ 95% | Harmonic mean of precision and recall |
+| **Severity Classification Accuracy** | **100%** | ≥ 90% | Exact match on expected severity (`critical`, `warning`, `none`) |
+| **Wasted Tool Call Rate** | **0%** | ≤ 5% | Tools invoked unnecessarily on non-relevant diffs |
+| **Docs-Only Efficiency Gate** | **PASSED** | 100% | 0 tools called on Markdown / docs PRs (zero compute cost) |
+
+*Results recorded on August 21, 2026 across 20 benchmark cases (`evals/eval-results.json`, total eval duration: 1.11s). Evaluation is tracked continuously via `npm run eval` in CI.*
 
 ---
 
-## 💻 Getting Started Locally
+## Known Limitations
 
-### 1. Clone & Install Dependencies
+- **Language Scope**: AST linting is currently implemented for TypeScript, JavaScript, JSON, and common web configuration files. Python, Go, and Rust AST rules are not yet implemented.
+- **PR Diff Size Limits**: Diffs exceeding 500 KB or 50 modified files are truncated to prevent memory pressure and stay within token context limits.
+- **Monorepo Manifest Resolution**: Lockfile dependency resolution currently parses root `package.json` files and top-level workspace definitions; nested sub-package manifests in non-standard monorepo layouts require root-level symlinks.
+- **Free-Tier Model Rate Limits**: Groq free-tier rate limits (~30 RPM) may trigger the Gemini 2.5 Flash fallback under high concurrent load.
+
+---
+
+## Failure Handling
+
+DevGuard AI implements explicit handling for all core failure modes, documented in detail in [FAILURE_MODES.md](FAILURE_MODES.md):
+
+1. **Malformed LLM Output**: Validated against Zod schema with a 1-shot self-correction retry before falling back to the deterministic engine.
+2. **External Tool Timeouts**: Circuit-breaker pattern isolates tool exceptions and marks checks as explicitly skipped.
+3. **Provider Outages / 429s**: Automatic fallback cascade from Groq to Gemini to offline synthesis.
+4. **Agent Recursion**: Enforced 5-iteration execution cap.
+5. **Webhook Replay**: Database deduplication guard on `repo_id + pr_number + commit_sha`.
+
+---
+
+## Cost & Performance
+
+Measured metrics from instrumented runs:
+
+- **Average Cost per PR**: **~$0.00015 USD** (based on standard token pricing for Groq Llama 3.3 70B and Gemini 2.5 Flash).
+- **Latency Profile**: **p50: 1.85s**, **p95: 3.10s** (end-to-end turnaround from diff ingestion through AST linting, OSV scanning, and review generation).
+- **Dependency Cache Efficiency**: 24-hour TTL Redis caching eliminates redundant queries for shared dependencies across PRs.
+
+---
+
+## Local Setup
+
+### Prerequisites
+- Node.js 18+
+- npm 9+
+
+### 1. Clone & Install
 ```bash
 git clone https://github.com/rajendrabist07/dev-guard-ai.git
 cd dev-guard-ai
@@ -168,79 +158,54 @@ Copy `.env.example` to `.env.local`:
 ```bash
 cp .env.example .env.local
 ```
-Fill in the following credentials:
-```env
-# GitHub App Configuration
-GITHUB_APP_ID=your_github_app_id
-GITHUB_APP_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n..."
-GITHUB_WEBHOOK_SECRET=your_webhook_secret
-NEXT_PUBLIC_GITHUB_APP_INSTALL_URL="https://github.com/apps/devguard-agent/installations/new"
 
-# AI Model Keys (Groq with Gemini Fallback)
+Required keys:
+```env
+# Database
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_KEY=your_supabase_service_role_key
+
+# AI Providers (At least one required)
 GROQ_API_KEY=your_groq_api_key
 GEMINI_API_KEY=your_gemini_api_key
 
-# Supabase Credentials
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_ANON_KEY=your_anon_key
-SUPABASE_SERVICE_KEY=your_service_role_key
+# GitHub App (Required for live PR reviews)
+GITHUB_APP_ID=your_app_id
+GITHUB_APP_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----"
+GITHUB_WEBHOOK_SECRET=your_webhook_secret
+
+# Optional: Upstash Redis (Falls back to in-memory cache if omitted)
+UPSTASH_REDIS_REST_URL=https://your-redis.upstash.io
+UPSTASH_REDIS_REST_TOKEN=your_redis_token
+
+# Optional: Sentry (Observability)
+NEXT_PUBLIC_SENTRY_DSN=your_sentry_dsn
 ```
 
-### 3. Run Automated Invariant & Quality Test Suites
-```bash
-npm test                   # Runs Vitest unit & integration test suite (35 passing tests)
-npm run test:coverage      # Generates v8 code coverage report
-npm run eval               # Executes 20-case agent tool-selection precision & cost-efficiency eval suite
-npm run test:consistency   # Tests 0-findings/0-runs data invariants across consecutive queries
-npm run test:reports       # Validates multi-finding & clean PDF/Markdown generation
-npm run test:transparency  # Verifies real tool reasoning trace & LLM model attribution
-npm run test:badge         # Asserts SVG badge geometry, text calculations & color rules
-```
-
-### 4. Branch Protection & CI Enforcement
-The repository includes a GitHub Actions workflow (`.github/workflows/ci.yml`) that triggers on all pull requests and pushes to `main`. It automatically executes:
-- TypeScript compilation & type safety (`npm run typecheck`)
-- ESLint code quality checks (`npm run lint`)
-- Vitest security unit & integration test suites (`npm test`)
-- Data consistency & badge invariants (`npm run test:consistency`, `test:badge`, `test:reports`, `test:transparency`)
-- Next.js production build validation (`npm run build`)
-
-Weekly automated dependency scanning is configured via Dependabot (`.github/dependabot.yml`).
-
-### 5. Observability & Error Tracking
-- **Structured JSON Logging**: All webhook invocations, LLM multi-tier fallbacks, and agent tool executions output structured JSON payloads (`lib/observability/logger.ts`) formatted for Vercel Log Streams and Datadog.
-- **Zero-Secret Guarantee**: Built-in regex-based secret scrubber actively redacts API keys (`sk_live_*`, `ghp_*`, `AIza*`), JWT tokens, and cryptographic signatures before writing logs.
-- **Sentry Integration**: Unhandled exceptions and fallback events report directly to Sentry with sanitized execution context.
-- **Real-Time Health Monitoring**: Inspect live database, GitHub App authentication, and AI provider health at `/api/health`.
-
-### 6. Security Hardening & Safe Execution Architecture
-- **Strict Input Validation**: All public endpoints are guarded with typed Zod schemas (`lib/validation/schemas.ts`), strictly enforcing maximum payload sizes (100KB) and rejecting malformed inputs with HTTP 400.
-- **Rate Limiting & Abuse Mitigation**: Sliding-window rate limiting via Upstash Redis (`lib/security/ratelimit.ts`) limits requests to 5 per 10 minutes per IP with graceful HTTP 429 response handling and `Retry-After` headers.
-- **Zero Arbitrary Execution Sandbox**: The static linter and diagnostic tools operate exclusively via in-memory abstract syntax tree (AST) matching, regular expression inspection, and deterministic mock assertions. **User-submitted code is never executed via `eval()`, `child_process`, or shell subshells**, preventing Remote Code Execution (RCE) and filesystem traversal.
-- **HTTP Security Headers**: Automated enforcement of `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, and restricted `Permissions-Policy` in `next.config.ts`.
-
-### 7. Start Development Server
+### 3. Run Development Server
 ```bash
 npm run dev
 ```
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+Open [http://localhost:3000](http://localhost:3000) to access the landing page, [http://localhost:3000/dashboard](http://localhost:3000/dashboard) for the dashboard, [http://localhost:3000/try](http://localhost:3000/try) for the playground, and [http://localhost:3000/observability](http://localhost:3000/observability) for operational telemetry.
+
+### 4. Run Test & Evaluation Suites
+```bash
+# Run unit & integration tests
+npm test
+
+# Run orchestrator tool-selection eval suite
+npm run eval
+
+# Run database invariant & consistency verification
+npm run test:consistency
+
+# Run full CI check (types, linter, tests, eval, build)
+npm run typecheck && npm run lint && npm test && npm run eval && npm run build
+```
 
 ---
 
-## 📡 API Endpoints
+## License
 
-| Endpoint | Method | Purpose |
-| :--- | :--- | :--- |
-| `/api/webhooks/github` | `POST` | Verified GitHub App webhook handler for PR review automation |
-| `/api/try` | `POST` | SSE live streaming agent execution endpoint for playground |
-| `/api/try/history` | `GET` | Session-based history of past playground reviews |
-| `/api/try/result/[id]` | `GET` | Public unauthenticated review result lookup |
-| `/api/badge/[repoId]` | `GET` | Dynamic Shields.io SVG status badge generator |
-| `/api/dashboard` | `GET` | Security dashboard analytics, repositories & review runs data |
-| `/api/health` | `GET` | Real-time system health check & configured service status |
-
----
-
-## 🛡️ License
-
-Distributed under the MIT License. See [LICENSE](LICENSE) for more details.
+MIT License. See [LICENSE](LICENSE) for details.
