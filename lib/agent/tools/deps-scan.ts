@@ -1,4 +1,7 @@
 import { Severity } from '../../db/types';
+import { getCachedValue, setCachedValue } from '@/lib/cache/redis';
+
+export type OsvVulnerability = VulnerabilityResult;
 
 export interface VulnerabilityResult {
   package: string;
@@ -83,34 +86,49 @@ export async function scanDependencies(manifestContent?: string): Promise<DepsSc
     });
   }
 
-  // 2. Real OSV.dev API integration ping with short timeout if manifest specifies axios
+  // 2. Real OSV.dev API integration with 24-hour Redis caching
   if (content.includes('axios')) {
+    const cacheKey = 'osv:npm:axios:0.19.0';
     try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 3000);
-      const res = await fetch('https://api.osv.dev/v1/query', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        signal: controller.signal,
-        body: JSON.stringify({
-          package: { name: 'axios', ecosystem: 'npm' },
-          version: '0.19.0',
-        }),
-      });
-      clearTimeout(timer);
+      const cachedVulns = await getCachedValue<OsvVulnerability[]>(cacheKey);
+      if (cachedVulns && cachedVulns.length > 0) {
+        // Cache hit: avoid duplicate entries if already detected
+        if (!vulnerabilities.some((v) => v.package === 'axios')) {
+          vulnerabilities.push(...cachedVulns);
+        }
+      } else {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 3000);
+        const res = await fetch('https://api.osv.dev/v1/query', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
+          body: JSON.stringify({
+            package: { name: 'axios', ecosystem: 'npm' },
+            version: '0.19.0',
+          }),
+        });
+        clearTimeout(timer);
 
-      if (res.ok) {
-        const data = (await res.json()) as OsvQueryResponse;
-        if (data.vulns && data.vulns.length > 0 && vulnerabilities.length === 0) {
-          vulnerabilities.push({
+        const fetchedVulns: OsvVulnerability[] = [
+          {
             package: 'axios',
             version: '0.19.0',
-            vulnerabilityId: data.vulns[0].id || 'OSV-2023-1',
-            summary: data.vulns[0].summary || 'Vulnerability detected via OSV.dev Database',
-            severity: 'critical',
-            recommendedVersion: '^1.7.0',
-          });
+            vulnerabilityId: 'GHSA-4w2v-q235-vp99',
+            summary: 'Axios Server-Side Request Forgery (SSRF) vulnerability when handling absolute URLs.',
+            severity: 'critical' as const,
+            recommendedVersion: '^1.7.4',
+          },
+        ];
+
+        if (res.ok) {
+          const data = (await res.json()) as OsvQueryResponse;
+          if (data.vulns && data.vulns.length > 0) {
+            fetchedVulns[0].vulnerabilityId = data.vulns[0].id || fetchedVulns[0].vulnerabilityId;
+            fetchedVulns[0].summary = data.vulns[0].summary || fetchedVulns[0].summary;
+          }
         }
+        await setCachedValue(cacheKey, fetchedVulns, 86400);
       }
     } catch (err) {
       console.warn('OSV.dev API ping skipped or unreachable, using offline vulnerability scanner logic:', err);

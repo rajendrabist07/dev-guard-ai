@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-08-21T13:17:26.947Z",
+  "timestamp": "2026-08-21T13:21:43.348Z",
   "total_cases": 20,
   "tool_selection_precision": 100,
   "tool_selection_recall": 100,
@@ -7,7 +7,7 @@
   "severity_accuracy": 100,
   "wasted_tool_call_rate": 0,
   "docs_efficiency_pass": true,
-  "total_duration_ms": 2183,
+  "total_duration_ms": 1128,
   "case_results": [
     {
       "id": "case-01-vulnerable-dep-axios",
@@ -25,7 +25,7 @@
       "actual_severity": "critical",
       "severity_matched": true,
       "actual_findings_count": 1,
-      "duration_ms": 1126
+      "duration_ms": 1124
     },
     {
       "id": "case-02-vulnerable-dep-lodash",
@@ -141,7 +141,7 @@
       "actual_severity": "critical",
       "severity_matched": true,
       "actual_findings_count": 1,
-      "duration_ms": 0
+      "duration_ms": 1
     },
     {
       "id": "case-09-xss-dangerous-innerhtml",
@@ -159,7 +159,7 @@
       "actual_severity": "critical",
       "severity_matched": true,
       "actual_findings_count": 1,
-      "duration_ms": 1
+      "duration_ms": 0
     },
     {
       "id": "case-10-xss-eval-execution",
@@ -267,7 +267,7 @@
       "actual_severity": "none",
       "severity_matched": true,
       "actual_findings_count": 0,
-      "duration_ms": 0
+      "duration_ms": 1
     },
     {
       "id": "case-16-clean-code-ui-component",
@@ -307,7 +307,7 @@
       "actual_severity": "critical",
       "severity_matched": true,
       "actual_findings_count": 3,
-      "duration_ms": 1053
+      "duration_ms": 0
     },
     {
       "id": "case-18-clean-package-json",

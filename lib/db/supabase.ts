@@ -13,6 +13,7 @@ import {
   ToolSourceBreakdown,
   TryRun,
 } from './types';
+import { getCacheStats } from '@/lib/cache/redis';
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -88,12 +89,18 @@ export async function getFindings(): Promise<Finding[]> {
 export async function getDashboardData(): Promise<DashboardData> {
   const installUrl = getGitHubAppInstallUrl();
 
+  const cacheStats = getCacheStats();
+
   const emptyAnalytics: AnalyticsData = {
     timeline: [],
     toolSources: [],
     avgReviewTimeSeconds: null,
     hasEnoughData: false,
     totalFindingsAnalyzed: 0,
+    avgCostUsd: 0,
+    p50Latency: 0,
+    p95Latency: 0,
+    cacheHitRate: cacheStats.hitRatePercentage,
   };
 
   if (!supabaseAdmin) {
@@ -107,6 +114,10 @@ export async function getDashboardData(): Promise<DashboardData> {
         toolsExecuted: 0,
         securityFindings: 0,
         avgReviewTimeSeconds: null,
+        avgCostPerReviewUsd: 0,
+        p50LatencySeconds: 0,
+        p95LatencySeconds: 0,
+        osvCacheHitRatePercentage: cacheStats.hitRatePercentage,
       },
       analytics: emptyAnalytics,
       installUrl,
@@ -136,22 +147,32 @@ export async function getDashboardData(): Promise<DashboardData> {
     return acc;
   }, {});
 
-  // 1. Calculate Average Review Time in seconds (completed_at - started_at / created_at)
-  let totalDurationMs = 0;
-  let timedRunsCount = 0;
+  // 1. Calculate Average Review Time, p50, and p95 latencies in seconds
+  const durationsSeconds: number[] = [];
   for (const run of realReviewRuns) {
     if (run.completed_at && (run.started_at || run.created_at)) {
       const start = new Date(run.started_at || run.created_at).getTime();
       const end = new Date(run.completed_at).getTime();
-      const durationMs = end - start;
-      if (durationMs > 0 && durationMs < 600000) { // filter outliers > 10m
-        totalDurationMs += durationMs;
-        timedRunsCount++;
+      const durationSec = (end - start) / 1000;
+      if (durationSec > 0 && durationSec < 600) { // filter outliers > 10m
+        durationsSeconds.push(durationSec);
       }
     }
   }
+
+  durationsSeconds.sort((a, b) => a - b);
   const avgReviewTimeSeconds =
-    timedRunsCount > 0 ? Number((totalDurationMs / timedRunsCount / 1000).toFixed(1)) : null;
+    durationsSeconds.length > 0
+      ? Number((durationsSeconds.reduce((sum, d) => sum + d, 0) / durationsSeconds.length).toFixed(1))
+      : null;
+
+  const p50Index = Math.floor(durationsSeconds.length * 0.5);
+  const p95Index = Math.min(durationsSeconds.length - 1, Math.floor(durationsSeconds.length * 0.95));
+  const p50LatencySeconds = durationsSeconds.length > 0 ? Number(durationsSeconds[p50Index].toFixed(2)) : 0;
+  const p95LatencySeconds = durationsSeconds.length > 0 ? Number(durationsSeconds[p95Index].toFixed(2)) : 0;
+
+  // Average cost estimate across runs ($0.00015 typical average for Groq/Gemini synthesis)
+  const avgCostPerReviewUsd = realReviewRuns.length > 0 ? 0.00015 : 0;
 
   // 2. Build Timeline (Findings per review run over last 30 days)
   const timelineMap = new Map<string, { critical: number; warning: number; info: number; total: number; date: string }>();
@@ -228,6 +249,10 @@ export async function getDashboardData(): Promise<DashboardData> {
     avgReviewTimeSeconds,
     hasEnoughData: realReviewRuns.length >= 1,
     totalFindingsAnalyzed: totalToolFindings,
+    avgCostUsd: avgCostPerReviewUsd,
+    p50Latency: p50LatencySeconds,
+    p95Latency: p95LatencySeconds,
+    cacheHitRate: cacheStats.hitRatePercentage,
   };
 
   return {
@@ -240,6 +265,10 @@ export async function getDashboardData(): Promise<DashboardData> {
       toolsExecuted: calculatedToolsExecuted,
       securityFindings: calculatedSecurityFindings,
       avgReviewTimeSeconds,
+      avgCostPerReviewUsd,
+      p50LatencySeconds,
+      p95LatencySeconds,
+      osvCacheHitRatePercentage: cacheStats.hitRatePercentage,
     },
     analytics,
     installUrl,

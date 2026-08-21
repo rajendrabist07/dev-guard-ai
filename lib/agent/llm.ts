@@ -21,6 +21,14 @@ export interface LLMSynthesisInput {
   }>;
 }
 
+export interface LLMTelemetry {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  estimatedCostUsd: number;
+  latencyMs: number;
+}
+
 export interface LLMSynthesisResult {
   summary: string;
   provider: 'Groq Llama 3.3 70B' | 'Gemini 2.5 Flash' | 'Deterministic Engine (Fallback)';
@@ -29,6 +37,30 @@ export interface LLMSynthesisResult {
   fallbackReason?: string;
   latencyMs: number;
   validationRetried?: boolean;
+  telemetry: LLMTelemetry;
+}
+
+/**
+ * Calculates estimated cost based on standard published pricing:
+ * - Groq Llama 3.3 70B: $0.59 / 1M prompt tokens, $0.79 / 1M completion tokens
+ * - Gemini 2.5 Flash: $0.075 / 1M prompt tokens, $0.30 / 1M completion tokens
+ */
+export function calculateEstimatedCost(provider: string, inputTokens: number, outputTokens: number): number {
+  if (provider.includes('Groq') || provider.includes('Llama')) {
+    const inputCost = (inputTokens / 1_000_000) * 0.59;
+    const outputCost = (outputTokens / 1_000_000) * 0.79;
+    return Number((inputCost + outputCost).toFixed(6));
+  }
+  if (provider.includes('Gemini') || provider.includes('Flash')) {
+    const inputCost = (inputTokens / 1_000_000) * 0.075;
+    const outputCost = (outputTokens / 1_000_000) * 0.30;
+    return Number((inputCost + outputCost).toFixed(6));
+  }
+  return 0; // Deterministic engine has 0 compute API cost
+}
+
+function estimateTokens(text: string): number {
+  return Math.max(1, Math.ceil(text.length / 4));
 }
 
 function parseAndValidateStructuredLLMOutput(rawText: string): { success: true; data: ValidatedLLMOutput } | { success: false; error: string } {
@@ -58,7 +90,7 @@ function parseAndValidateStructuredLLMOutput(rawText: string): { success: true; 
 
 /**
  * Executes multi-tier LLM synthesis with Zod schema validation, self-correction retry,
- * and transparent model attribution.
+ * token accounting, and cost estimation telemetry.
  */
 export async function synthesizeReviewWithLLM(input: LLMSynthesisInput): Promise<LLMSynthesisResult> {
   const startTime = Date.now();
@@ -73,6 +105,8 @@ Tool Evidence Collected:
 ${input.toolOutputs.map((t, idx) => `${idx + 1}. [${t.tool}] -> ${t.summary} (${t.findingsCount} findings)`).join('\n')}
 
 Provide a concise 3-4 bullet executive summary of the review findings and actionable guidance. Keep it professional, empirical, and direct without filler words.`;
+
+  const inputTokenEstimate = estimateTokens(prompt);
 
   // Tier 1: Try Groq Llama 3.3 70B
   if (groqKey && !groqKey.includes('your_groq_api_key')) {
@@ -94,7 +128,6 @@ Provide a concise 3-4 bullet executive summary of the review findings and action
       let rawContent = completion.choices[0]?.message?.content?.trim() || '';
       let validation = parseAndValidateStructuredLLMOutput(rawContent);
 
-      // Self-correction retry if validation fails
       let validationRetried = false;
       if (!validation.success) {
         logger.warn('LLM structured output validation failed on first attempt, retrying with correction prompt', {
@@ -122,13 +155,25 @@ Provide a concise 3-4 bullet executive summary of the review findings and action
       }
 
       if (validation.success) {
+        const inTokens = completion.usage?.prompt_tokens ?? inputTokenEstimate;
+        const outTokens = completion.usage?.completion_tokens ?? estimateTokens(rawContent);
+        const costUsd = calculateEstimatedCost('Groq Llama 3.3 70B', inTokens, outTokens);
+        const latencyMs = Date.now() - startTime;
+
         return {
           summary: validation.data.summary,
           provider: 'Groq Llama 3.3 70B',
           model: 'llama-3.3-70b-versatile',
           fallbackTriggered: false,
-          latencyMs: Date.now() - startTime,
+          latencyMs,
           validationRetried,
+          telemetry: {
+            inputTokens: inTokens,
+            outputTokens: outTokens,
+            totalTokens: inTokens + outTokens,
+            estimatedCostUsd: costUsd,
+            latencyMs,
+          },
         };
       }
     } catch (groqErr: unknown) {
@@ -153,10 +198,10 @@ Provide a concise 3-4 bullet executive summary of the review findings and action
           const geminiValidation = parseAndValidateStructuredLLMOutput(geminiSummary);
 
           if (geminiValidation.success) {
-            logger.info('Successfully synthesized findings via Gemini 2.5 Flash fallback', {
-              module: 'llm-synthesizer',
-              provider: 'Gemini 2.5 Flash',
-            });
+            const inTokens = res.response.usageMetadata?.promptTokenCount ?? inputTokenEstimate;
+            const outTokens = res.response.usageMetadata?.candidatesTokenCount ?? estimateTokens(geminiSummary);
+            const costUsd = calculateEstimatedCost('Gemini 2.5 Flash', inTokens, outTokens);
+            const latencyMs = Date.now() - startTime;
 
             return {
               summary: geminiValidation.data.summary,
@@ -164,7 +209,14 @@ Provide a concise 3-4 bullet executive summary of the review findings and action
               model: 'gemini-2.0-flash',
               fallbackTriggered: true,
               fallbackReason: reason,
-              latencyMs: Date.now() - startTime,
+              latencyMs,
+              telemetry: {
+                inputTokens: inTokens,
+                outputTokens: outTokens,
+                totalTokens: inTokens + outTokens,
+                estimatedCostUsd: costUsd,
+                latencyMs,
+              },
             };
           }
         } catch (geminiErr) {
@@ -187,12 +239,24 @@ Provide a concise 3-4 bullet executive summary of the review findings and action
       const geminiValidation = parseAndValidateStructuredLLMOutput(geminiSummary);
 
       if (geminiValidation.success) {
+        const inTokens = res.response.usageMetadata?.promptTokenCount ?? inputTokenEstimate;
+        const outTokens = res.response.usageMetadata?.candidatesTokenCount ?? estimateTokens(geminiSummary);
+        const costUsd = calculateEstimatedCost('Gemini 2.5 Flash', inTokens, outTokens);
+        const latencyMs = Date.now() - startTime;
+
         return {
           summary: geminiValidation.data.summary,
           provider: 'Gemini 2.5 Flash',
           model: 'gemini-2.0-flash',
           fallbackTriggered: false,
-          latencyMs: Date.now() - startTime,
+          latencyMs,
+          telemetry: {
+            inputTokens: inTokens,
+            outputTokens: outTokens,
+            totalTokens: inTokens + outTokens,
+            estimatedCostUsd: costUsd,
+            latencyMs,
+          },
         };
       }
     } catch (geminiErr) {
@@ -209,11 +273,22 @@ Provide a concise 3-4 bullet executive summary of the review findings and action
     `- Verification verified by AST Linter, OSV.dev CVE database, and unit test runners.`,
   ].join('\n');
 
+  const inTokens = inputTokenEstimate;
+  const outTokens = estimateTokens(fallbackSummary);
+  const latencyMs = Date.now() - startTime;
+
   return {
     summary: fallbackSummary,
     provider: 'Deterministic Engine (Fallback)',
     model: 'deterministic-ast-engine',
     fallbackTriggered: false,
-    latencyMs: Date.now() - startTime,
+    latencyMs,
+    telemetry: {
+      inputTokens: inTokens,
+      outputTokens: outTokens,
+      totalTokens: inTokens + outTokens,
+      estimatedCostUsd: 0,
+      latencyMs,
+    },
   };
 }

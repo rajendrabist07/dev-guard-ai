@@ -95,6 +95,10 @@ export interface DashboardStats {
   toolsExecuted: number;
   securityFindings: number;
   avgReviewTimeSeconds: number | null;
+  avgCostPerReviewUsd: number;
+  p50LatencySeconds: number;
+  p95LatencySeconds: number;
+  osvCacheHitRatePercentage: number;
 }
 
 export interface FindingsTimelinePoint {
@@ -120,6 +124,10 @@ export interface AnalyticsData {
   avgReviewTimeSeconds: number | null;
   hasEnoughData: boolean;
   totalFindingsAnalyzed: number;
+  avgCostUsd: number;
+  p50Latency: number;
+  p95Latency: number;
+  cacheHitRate: number;
 }
 
 export interface DashboardData {

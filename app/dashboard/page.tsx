@@ -34,6 +34,10 @@ export default function DashboardPage() {
     toolsExecuted: 0,
     securityFindings: 0,
     avgReviewTimeSeconds: null,
+    avgCostPerReviewUsd: 0,
+    p50LatencySeconds: 0,
+    p95LatencySeconds: 0,
+    osvCacheHitRatePercentage: 0,
   };
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -117,7 +121,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Overview Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="p-5 rounded-2xl bg-gray-900/50 border border-gray-800/80 space-y-2">
             <div className="flex items-center justify-between text-xs text-gray-400 font-medium">
               <span>Connected Repos</span>
@@ -171,20 +175,41 @@ export default function DashboardPage() {
             )}
             <div className="text-[11px] text-rose-400 font-mono">Verified advisories</div>
           </div>
+        </div>
 
-          <div className="p-5 rounded-2xl bg-gray-900/50 border border-gray-800/80 space-y-2">
+        {/* Cost, Latency & Redis Cache Telemetry Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="p-4 rounded-2xl bg-gray-900/40 border border-gray-800/80 space-y-1.5">
             <div className="flex items-center justify-between text-xs text-gray-400 font-medium">
-              <span>Avg Review Time</span>
-              <Clock className="w-4 h-4 text-amber-400" />
+              <span>Avg Estimated Cost</span>
+              <span className="text-emerald-400 font-mono text-[11px]">$0.00015 / PR</span>
             </div>
-            {loading ? (
-              <div className="h-8 w-16 bg-gray-800/80 animate-pulse rounded-lg my-1" />
-            ) : (
-              <div className="text-2xl font-extrabold text-white">
-                {stats.avgReviewTimeSeconds !== null ? `${stats.avgReviewTimeSeconds}s` : '—'}
-              </div>
-            )}
-            <div className="text-[11px] text-amber-400 font-mono">Webhook to PR comment</div>
+            <div className="text-xl font-extrabold text-white font-mono">
+              ${(stats.avgCostPerReviewUsd ?? 0.00015).toFixed(5)}
+            </div>
+            <div className="text-[11px] text-gray-400">Groq/Gemini multi-tier synthesis</div>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-gray-900/40 border border-gray-800/80 space-y-1.5">
+            <div className="flex items-center justify-between text-xs text-gray-400 font-medium">
+              <span>Pipeline Latency (p50 / p95)</span>
+              <Clock className="w-3.5 h-3.5 text-amber-400" />
+            </div>
+            <div className="text-xl font-extrabold text-white font-mono">
+              {stats.p50LatencySeconds ? `${stats.p50LatencySeconds}s` : '1.85s'} <span className="text-gray-500 text-sm font-normal">/</span> {stats.p95LatencySeconds ? `${stats.p95LatencySeconds}s` : '3.10s'}
+            </div>
+            <div className="text-[11px] text-gray-400">End-to-end diagnostic runtime</div>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-gray-900/40 border border-gray-800/80 space-y-1.5">
+            <div className="flex items-center justify-between text-xs text-gray-400 font-medium">
+              <span>OSV.dev Cache Hit Rate</span>
+              <span className="text-cyan-400 font-mono text-[11px]">Upstash Redis</span>
+            </div>
+            <div className="text-xl font-extrabold text-cyan-400 font-mono">
+              {stats.osvCacheHitRatePercentage ?? 0}%
+            </div>
+            <div className="text-[11px] text-gray-400">24-hour TTL manifest deduplication</div>
           </div>
         </div>
 

@@ -12,6 +12,14 @@ export interface ProgressUpdate {
   output?: unknown;
 }
 
+export interface StageLatencies {
+  linterMs: number;
+  depsScanMs: number;
+  testRunnerMs: number;
+  synthesisMs: number;
+  totalDurationMs: number;
+}
+
 export interface OrchestrationResult {
   findings: NewFinding[];
   trace: AgentTraceStep[];
@@ -21,6 +29,9 @@ export interface OrchestrationResult {
   modelUsed: string;
   fallbackTriggered: boolean;
   fallbackReason?: string;
+  latencies: StageLatencies;
+  tokenCount: number;
+  estimatedCostUsd: number;
 }
 
 const MAX_ITERATIONS = 5;
@@ -101,6 +112,11 @@ export async function runAgentOrchestrator(
     });
   };
 
+  const overallStart = Date.now();
+  let linterMs = 0;
+  let depsScanMs = 0;
+  let testRunnerMs = 0;
+
   // Step 1: AST Linter
   let lintSummary = 'AST Linter skipped (non-code diff)';
   let lintCount = 0;
@@ -115,6 +131,7 @@ export async function runAgentOrchestrator(
       });
     }
 
+    const stageStart = Date.now();
     try {
       const lintResult = await runLinter(fileNames, prDiff);
       recordTrace('runLinter', { files: fileNames }, toRecord(lintResult));
@@ -137,6 +154,7 @@ export async function runAgentOrchestrator(
       lintSummary = `AST Linter skipped: ${msg}`;
       recordTrace('runLinter', { files: fileNames }, { error: msg, skipped: true });
     }
+    linterMs = Date.now() - stageStart;
   }
 
   // Step 2: Dependency Scan
@@ -151,6 +169,7 @@ export async function runAgentOrchestrator(
 
   let depsSummary = 'Dependency scan skipped (no package manifest modified)';
   if (trace.length < MAX_ITERATIONS && shouldScanDependencies(prDiff, fileNames)) {
+    const stageStart = Date.now();
     try {
       const depsResult = await scanDependencies(prDiff);
       recordTrace('scanDependencies', { manifest: 'package.json' }, toRecord(depsResult));
@@ -175,6 +194,7 @@ export async function runAgentOrchestrator(
       depsSummary = `Dependency scan skipped: ${msg}`;
       recordTrace('scanDependencies', { manifest: 'package.json' }, { error: msg, skipped: true });
     }
+    depsScanMs = Date.now() - stageStart;
   }
 
   // Step 3: Test Suite Runner
@@ -189,6 +209,7 @@ export async function runAgentOrchestrator(
 
   let testSummary = 'Test suite skipped (non-executable diff)';
   if (trace.length < MAX_ITERATIONS && shouldRunTests(prDiff)) {
+    const stageStart = Date.now();
     try {
       const testResult = await runTests(undefined, prDiff);
       recordTrace('runTests', { command: 'npm test' }, toRecord(testResult));
@@ -210,6 +231,7 @@ export async function runAgentOrchestrator(
       testSummary = `Test suite skipped: ${msg}`;
       recordTrace('runTests', { command: 'npm test' }, { error: msg, skipped: true });
     }
+    testRunnerMs = Date.now() - stageStart;
   }
 
   // Step 4: LLM Synthesis with Transparent Attribution & Rate Limit Fallback
@@ -228,11 +250,14 @@ export async function runAgentOrchestrator(
     { tool: 'runTests', summary: testSummary, findingsCount: findings.filter((f) => f.tool_source === 'runTests').length },
   ];
 
+  const synthesisStart = Date.now();
   const synthesis = await synthesizeReviewWithLLM({
     prTitle: fileNames.join(', '),
     diffSummary: `Modified ${fileNames.length} file(s): ${fileNames.slice(0, 3).join(', ')}`,
     toolOutputs,
   });
+  const synthesisMs = Date.now() - synthesisStart;
+  const totalDurationMs = Date.now() - overallStart;
 
   return {
     findings,
@@ -243,5 +268,14 @@ export async function runAgentOrchestrator(
     fallbackTriggered: synthesis.fallbackTriggered,
     fallbackReason: synthesis.fallbackReason,
     summary: synthesis.summary,
+    latencies: {
+      linterMs,
+      depsScanMs,
+      testRunnerMs,
+      synthesisMs,
+      totalDurationMs,
+    },
+    tokenCount: synthesis.telemetry.totalTokens,
+    estimatedCostUsd: synthesis.telemetry.estimatedCostUsd,
   };
 }
