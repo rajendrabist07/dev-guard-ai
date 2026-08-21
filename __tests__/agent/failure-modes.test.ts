@@ -3,7 +3,6 @@ import { runAgentOrchestrator } from '@/lib/agent/orchestrator';
 import { synthesizeReviewWithLLM } from '@/lib/agent/llm';
 import * as depsScanModule from '@/lib/agent/tools/deps-scan';
 import * as testRunnerModule from '@/lib/agent/tools/test-runner';
-import * as lintModule from '@/lib/agent/tools/lint';
 import { findExistingReviewRun } from '@/lib/db/supabase';
 
 describe('Sprint W2: Robust Failure Modes & Degradation Handling', () => {

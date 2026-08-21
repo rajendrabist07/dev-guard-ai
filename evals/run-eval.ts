@@ -75,7 +75,6 @@ async function runEvaluation() {
     // Calculate Precision & Recall for Tool Selection
     const truePositives = actualTools.filter((t) => expectedSet.has(t)).length;
     const falsePositives = actualTools.filter((t) => !expectedSet.has(t));
-    const falseNegatives = testCase.expected_tools_called.filter((t) => !actualSet.has(t));
 
     const precision =
       actualTools.length === 0

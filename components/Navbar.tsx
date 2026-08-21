@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ShieldAlert, Github, LayoutDashboard, Cpu } from 'lucide-react';
+import { ShieldAlert, Github, LayoutDashboard, Cpu, Activity } from 'lucide-react';
 import { getGitHubAppInstallUrl } from '@/lib/github/config';
 
 export default function Navbar() {
@@ -31,6 +31,13 @@ export default function Navbar() {
           >
             <LayoutDashboard className="w-4 h-4" />
             <span>Dashboard</span>
+          </Link>
+          <Link
+            href="/observability"
+            className="flex items-center space-x-2 text-sm font-medium text-gray-300 hover:text-cyan-400 transition-colors"
+          >
+            <Activity className="w-4 h-4 text-cyan-400" />
+            <span className="hidden sm:inline">Telemetry</span>
           </Link>
           <a
             href={installUrl}

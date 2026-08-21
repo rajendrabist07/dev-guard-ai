@@ -13,6 +13,23 @@ export interface LogContext {
   [key: string]: unknown;
 }
 
+export interface StructuredLogEntry {
+  id: string;
+  timestamp: string;
+  level: LogLevel;
+  message: string;
+  error?: string;
+  context?: LogContext;
+}
+
+// In-memory ring buffer for the operational observability dashboard
+const LOG_BUFFER_CAPACITY = 100;
+const inMemoryLogBuffer: StructuredLogEntry[] = [];
+
+export function getRecentStructuredLogs(limit = 50): StructuredLogEntry[] {
+  return inMemoryLogBuffer.slice(-limit).reverse();
+}
+
 const SENSITIVE_PATTERNS = [
   /sk_live_[a-zA-Z0-9_-]+/gi,
   /ghp_[a-zA-Z0-9_-]+/gi,
@@ -59,46 +76,60 @@ export function scrubSecrets(input: unknown): unknown {
   return input;
 }
 
+function appendToBuffer(entry: StructuredLogEntry) {
+  if (inMemoryLogBuffer.length >= LOG_BUFFER_CAPACITY) {
+    inMemoryLogBuffer.shift();
+  }
+  inMemoryLogBuffer.push(entry);
+}
+
 /**
  * Structured logger writing clean, timestamped, module-scoped JSON payloads.
  */
 export const logger = {
   debug(message: string, context?: LogContext) {
+    const safeCtx = scrubSecrets(context) as LogContext | undefined;
+    const entry: StructuredLogEntry = {
+      id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      timestamp: new Date().toISOString(),
+      level: 'debug',
+      message: String(scrubSecrets(message)),
+      context: safeCtx,
+      ...safeCtx,
+    };
+    appendToBuffer(entry);
+
     if (process.env.NODE_ENV === 'development') {
-      const safeCtx = scrubSecrets(context) as LogContext | undefined;
-      console.debug(
-        JSON.stringify({
-          timestamp: new Date().toISOString(),
-          level: 'debug',
-          message,
-          ...safeCtx,
-        })
-      );
+      console.debug(JSON.stringify(entry));
     }
   },
 
   info(message: string, context?: LogContext) {
     const safeCtx = scrubSecrets(context) as LogContext | undefined;
-    console.log(
-      JSON.stringify({
-        timestamp: new Date().toISOString(),
-        level: 'info',
-        message,
-        ...safeCtx,
-      })
-    );
+    const entry: StructuredLogEntry = {
+      id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      timestamp: new Date().toISOString(),
+      level: 'info',
+      message: String(scrubSecrets(message)),
+      context: safeCtx,
+      ...safeCtx,
+    };
+    appendToBuffer(entry);
+    console.log(JSON.stringify(entry));
   },
 
   warn(message: string, context?: LogContext) {
     const safeCtx = scrubSecrets(context) as LogContext | undefined;
-    console.warn(
-      JSON.stringify({
-        timestamp: new Date().toISOString(),
-        level: 'warn',
-        message,
-        ...safeCtx,
-      })
-    );
+    const entry: StructuredLogEntry = {
+      id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      timestamp: new Date().toISOString(),
+      level: 'warn',
+      message: String(scrubSecrets(message)),
+      context: safeCtx,
+      ...safeCtx,
+    };
+    appendToBuffer(entry);
+    console.warn(JSON.stringify(entry));
 
     // Send high-signal warning breadcrumb to Sentry
     if (process.env.SENTRY_DSN || process.env.NEXT_PUBLIC_SENTRY_DSN) {
@@ -116,14 +147,21 @@ export const logger = {
     const errorMessage = error instanceof Error ? error.message : String(error || message);
     const safeErrorMsg = String(scrubSecrets(errorMessage));
 
+    const entry: StructuredLogEntry = {
+      id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      timestamp: new Date().toISOString(),
+      level: 'error',
+      message: String(scrubSecrets(message)),
+      error: safeErrorMsg,
+      context: safeCtx,
+      ...safeCtx,
+    };
+    appendToBuffer(entry);
+
     console.error(
       JSON.stringify({
-        timestamp: new Date().toISOString(),
-        level: 'error',
-        message: String(scrubSecrets(message)),
-        error: safeErrorMsg,
+        ...entry,
         stack: error instanceof Error ? scrubSecrets(error.stack) : undefined,
-        ...safeCtx,
       })
     );
 
