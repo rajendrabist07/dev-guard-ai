@@ -8,6 +8,7 @@ import {
 import {
   createReviewRun,
   ensureRepoForInstallation,
+  findExistingReviewRun,
   saveFindings,
   updateReviewRun,
 } from '@/lib/db/supabase';
@@ -93,7 +94,25 @@ export async function POST(req: NextRequest) {
           fullName: repoFullName,
         });
 
-        // 2. Create initial review_run row in Supabase DB
+        // 2. Check for Webhook Replay / Duplicate Delivery (Idempotency Guard)
+        const existingRun = await findExistingReviewRun(storedRepo.id, prNumber, commitSha);
+        if (existingRun && (existingRun.status === 'completed' || existingRun.status === 'running')) {
+          logger.info('Duplicate webhook event detected — skipping review execution (idempotent)', {
+            module: 'webhook-handler',
+            action: 'idempotency-dedupe',
+            repoFullName,
+            prNumber,
+            commitSha: commitSha.substring(0, 7),
+            existingRunId: existingRun.id,
+          });
+          return NextResponse.json({
+            message: 'Duplicate event ignored (idempotent)',
+            reviewRunId: existingRun.id,
+            status: 'duplicate',
+          }, { status: 200 });
+        }
+
+        // 3. Create initial review_run row in Supabase DB
         const reviewRun = await createReviewRun({
           repo_id: storedRepo.id,
           pr_number: prNumber,

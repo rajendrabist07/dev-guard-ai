@@ -1,6 +1,15 @@
+import { z } from 'zod';
 import Groq from 'groq-sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { logger } from '@/lib/observability/logger';
+
+export const LLMOutputSchema = z.object({
+  summary: z.string().min(10, 'Summary must be at least 10 characters long'),
+  keyPoints: z.array(z.string()).min(1, 'At least one key finding bullet is required').optional(),
+  actionableGuidance: z.string().optional(),
+});
+
+export type ValidatedLLMOutput = z.infer<typeof LLMOutputSchema>;
 
 export interface LLMSynthesisInput {
   prTitle?: string;
@@ -19,13 +28,37 @@ export interface LLMSynthesisResult {
   fallbackTriggered: boolean;
   fallbackReason?: string;
   latencyMs: number;
+  validationRetried?: boolean;
+}
+
+function parseAndValidateStructuredLLMOutput(rawText: string): { success: true; data: ValidatedLLMOutput } | { success: false; error: string } {
+  const cleaned = rawText.trim().replace(/^```json\s*/i, '').replace(/```$/i, '').trim();
+
+  // Try JSON parse first
+  try {
+    const jsonParsed = JSON.parse(cleaned);
+    const result = LLMOutputSchema.safeParse(jsonParsed);
+    if (result.success) {
+      return { success: true, data: result.data };
+    }
+    return { success: false, error: result.error.message };
+  } catch {
+    // If not JSON, validate as direct summary text
+    if (cleaned.length >= 10) {
+      return {
+        success: true,
+        data: {
+          summary: cleaned,
+        },
+      };
+    }
+    return { success: false, error: 'Output text is too short or empty' };
+  }
 }
 
 /**
- * Executes multi-tier LLM synthesis with transparent model attribution and rate-limit fallback:
- * Tier 1: Groq llama-3.3-70b-versatile
- * Tier 2 (Fallback): Google Gemini 2.5 Flash
- * Tier 3 (Offline/No-Key Fallback): Deterministic Engine
+ * Executes multi-tier LLM synthesis with Zod schema validation, self-correction retry,
+ * and transparent model attribution.
  */
 export async function synthesizeReviewWithLLM(input: LLMSynthesisInput): Promise<LLMSynthesisResult> {
   const startTime = Date.now();
@@ -45,7 +78,7 @@ Provide a concise 3-4 bullet executive summary of the review findings and action
   if (groqKey && !groqKey.includes('your_groq_api_key')) {
     try {
       const groq = new Groq({ apiKey: groqKey });
-      const completion = await groq.chat.completions.create({
+      let completion = await groq.chat.completions.create({
         model: 'llama-3.3-70b-versatile',
         messages: [
           {
@@ -58,14 +91,44 @@ Provide a concise 3-4 bullet executive summary of the review findings and action
         max_tokens: 300,
       });
 
-      const summary = completion.choices[0]?.message?.content?.trim();
-      if (summary) {
+      let rawContent = completion.choices[0]?.message?.content?.trim() || '';
+      let validation = parseAndValidateStructuredLLMOutput(rawContent);
+
+      // Self-correction retry if validation fails
+      let validationRetried = false;
+      if (!validation.success) {
+        logger.warn('LLM structured output validation failed on first attempt, retrying with correction prompt', {
+          module: 'llm-synthesizer',
+          error: validation.error,
+        });
+
+        completion = await groq.chat.completions.create({
+          model: 'llama-3.3-70b-versatile',
+          messages: [
+            { role: 'user', content: prompt },
+            { role: 'assistant', content: rawContent },
+            {
+              role: 'user',
+              content: `Your previous output failed validation: ${validation.error}. Please provide a clear 3-4 bullet markdown summary of findings without markdown fences.`,
+            },
+          ],
+          temperature: 0.1,
+          max_tokens: 300,
+        });
+
+        rawContent = completion.choices[0]?.message?.content?.trim() || '';
+        validation = parseAndValidateStructuredLLMOutput(rawContent);
+        validationRetried = true;
+      }
+
+      if (validation.success) {
         return {
-          summary,
+          summary: validation.data.summary,
           provider: 'Groq Llama 3.3 70B',
           model: 'llama-3.3-70b-versatile',
           fallbackTriggered: false,
           latencyMs: Date.now() - startTime,
+          validationRetried,
         };
       }
     } catch (groqErr: unknown) {
@@ -87,15 +150,16 @@ Provide a concise 3-4 bullet executive summary of the review findings and action
           const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
           const res = await model.generateContent(prompt);
           const geminiSummary = res.response.text().trim();
+          const geminiValidation = parseAndValidateStructuredLLMOutput(geminiSummary);
 
-          if (geminiSummary) {
+          if (geminiValidation.success) {
             logger.info('Successfully synthesized findings via Gemini 2.5 Flash fallback', {
               module: 'llm-synthesizer',
               provider: 'Gemini 2.5 Flash',
             });
 
             return {
-              summary: geminiSummary,
+              summary: geminiValidation.data.summary,
               provider: 'Gemini 2.5 Flash',
               model: 'gemini-2.0-flash',
               fallbackTriggered: true,
@@ -120,10 +184,11 @@ Provide a concise 3-4 bullet executive summary of the review findings and action
       const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
       const res = await model.generateContent(prompt);
       const geminiSummary = res.response.text().trim();
+      const geminiValidation = parseAndValidateStructuredLLMOutput(geminiSummary);
 
-      if (geminiSummary) {
+      if (geminiValidation.success) {
         return {
-          summary: geminiSummary,
+          summary: geminiValidation.data.summary,
           provider: 'Gemini 2.5 Flash',
           model: 'gemini-2.0-flash',
           fallbackTriggered: false,

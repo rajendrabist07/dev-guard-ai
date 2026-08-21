@@ -337,6 +337,28 @@ export async function ensureRepoForInstallation(input: {
   return createdRepo as Repo;
 }
 
+export async function findExistingReviewRun(repoId: string, prNumber: number, commitSha: string): Promise<DisplayReviewRun | null> {
+  try {
+    const db = requireSupabaseAdmin();
+    const { data, error } = await db
+      .from('review_runs')
+      .select('*')
+      .eq('repo_id', repoId)
+      .eq('pr_number', prNumber)
+      .eq('commit_sha', commitSha)
+      .maybeSingle();
+
+    if (error) {
+      console.warn(`Idempotency check query failed: ${error.message}`);
+      return null;
+    }
+    return (data as DisplayReviewRun) ?? null;
+  } catch (err) {
+    console.warn('findExistingReviewRun fallback:', err);
+    return null;
+  }
+}
+
 export async function createReviewRun(data: NewReviewRun): Promise<DisplayReviewRun> {
   const db = requireSupabaseAdmin();
   const insertData = {

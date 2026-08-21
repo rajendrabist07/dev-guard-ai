@@ -115,21 +115,27 @@ export async function runAgentOrchestrator(
       });
     }
 
-    const lintResult = await runLinter(fileNames, prDiff);
-    recordTrace('runLinter', { files: fileNames }, toRecord(lintResult));
-    lintSummary = lintResult.summary;
-    lintCount = lintResult.items.length;
+    try {
+      const lintResult = await runLinter(fileNames, prDiff);
+      recordTrace('runLinter', { files: fileNames }, toRecord(lintResult));
+      lintSummary = lintResult.summary;
+      lintCount = lintResult.items.length;
 
-    for (const item of lintResult.items) {
-      findings.push({
-        review_run_id: reviewRunId,
-        severity: item.severity,
-        file_path: item.file,
-        line: item.line,
-        message: item.message,
-        suggested_fix: item.suggestedFix ?? null,
-        tool_source: 'runLinter',
-      });
+      for (const item of lintResult.items) {
+        findings.push({
+          review_run_id: reviewRunId,
+          severity: item.severity,
+          file_path: item.file,
+          line: item.line,
+          message: item.message,
+          suggested_fix: item.suggestedFix ?? null,
+          tool_source: 'runLinter',
+        });
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'AST Linter parser failure';
+      lintSummary = `AST Linter skipped: ${msg}`;
+      recordTrace('runLinter', { files: fileNames }, { error: msg, skipped: true });
     }
   }
 
@@ -145,23 +151,29 @@ export async function runAgentOrchestrator(
 
   let depsSummary = 'Dependency scan skipped (no package manifest modified)';
   if (trace.length < MAX_ITERATIONS && shouldScanDependencies(prDiff, fileNames)) {
-    const depsResult = await scanDependencies(prDiff);
-    recordTrace('scanDependencies', { manifest: 'package.json' }, toRecord(depsResult));
-    depsSummary = depsResult.summary;
+    try {
+      const depsResult = await scanDependencies(prDiff);
+      recordTrace('scanDependencies', { manifest: 'package.json' }, toRecord(depsResult));
+      depsSummary = depsResult.summary;
 
-    for (const vulnerability of depsResult.vulnerabilities) {
-      if (vulnerability.vulnerabilityId === 'NONE') continue;
-      findings.push({
-        review_run_id: reviewRunId,
-        severity: vulnerability.severity,
-        file_path: 'package.json',
-        line: 1,
-        message: `[${vulnerability.vulnerabilityId}] ${vulnerability.summary} (${vulnerability.package}@${vulnerability.version})`,
-        suggested_fix: vulnerability.recommendedVersion
-          ? `"${vulnerability.package}": "${vulnerability.recommendedVersion}"`
-          : null,
-        tool_source: 'scanDependencies',
-      });
+      for (const vulnerability of depsResult.vulnerabilities) {
+        if (vulnerability.vulnerabilityId === 'NONE') continue;
+        findings.push({
+          review_run_id: reviewRunId,
+          severity: vulnerability.severity,
+          file_path: 'package.json',
+          line: 1,
+          message: `[${vulnerability.vulnerabilityId}] ${vulnerability.summary} (${vulnerability.package}@${vulnerability.version})`,
+          suggested_fix: vulnerability.recommendedVersion
+            ? `"${vulnerability.package}": "${vulnerability.recommendedVersion}"`
+            : null,
+          tool_source: 'scanDependencies',
+        });
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'OSV.dev unreachable';
+      depsSummary = `Dependency scan skipped: ${msg}`;
+      recordTrace('scanDependencies', { manifest: 'package.json' }, { error: msg, skipped: true });
     }
   }
 
@@ -177,20 +189,26 @@ export async function runAgentOrchestrator(
 
   let testSummary = 'Test suite skipped (non-executable diff)';
   if (trace.length < MAX_ITERATIONS && shouldRunTests(prDiff)) {
-    const testResult = await runTests(undefined, prDiff);
-    recordTrace('runTests', { command: 'npm test' }, toRecord(testResult));
-    testSummary = testResult.summary;
+    try {
+      const testResult = await runTests(undefined, prDiff);
+      recordTrace('runTests', { command: 'npm test' }, toRecord(testResult));
+      testSummary = testResult.summary;
 
-    for (const failure of testResult.failures) {
-      findings.push({
-        review_run_id: reviewRunId,
-        severity: 'critical',
-        file_path: failure.filePath,
-        line: 1,
-        message: `Test failure: ${failure.testName} - ${failure.errorMessage}`,
-        suggested_fix: 'Fix the failing assertion and rerun the project test suite.',
-        tool_source: 'runTests',
-      });
+      for (const failure of testResult.failures) {
+        findings.push({
+          review_run_id: reviewRunId,
+          severity: 'critical',
+          file_path: failure.filePath,
+          line: 1,
+          message: `Test failure: ${failure.testName} - ${failure.errorMessage}`,
+          suggested_fix: 'Fix the failing assertion and rerun the project test suite.',
+          tool_source: 'runTests',
+        });
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Test runner execution timeout';
+      testSummary = `Test suite skipped: ${msg}`;
+      recordTrace('runTests', { command: 'npm test' }, { error: msg, skipped: true });
     }
   }
 
