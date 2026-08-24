@@ -243,9 +243,34 @@ export async function getDashboardData(): Promise<DashboardData> {
       ].filter((t) => t.count > 0 || totalToolFindings === 0)
     : [];
 
+  // 4. Build Confidence Distribution Breakdown
+  let highConfCount = 0;
+  let medConfCount = 0;
+  let lowConfCount = 0;
+
+  for (const f of realFindings) {
+    if (f.confidence === 'high' || f.tool_source === 'scanDependencies' || f.tool_source === 'runTests') {
+      highConfCount++;
+    } else if (f.confidence === 'low' || f.severity === 'info') {
+      lowConfCount++;
+    } else {
+      medConfCount++;
+    }
+  }
+
+  const confidenceDistribution = {
+    highCount: highConfCount,
+    mediumCount: medConfCount,
+    lowCount: lowConfCount,
+    highPercentage: totalToolFindings > 0 ? Math.round((highConfCount / totalToolFindings) * 100) : 0,
+    mediumPercentage: totalToolFindings > 0 ? Math.round((medConfCount / totalToolFindings) * 100) : 0,
+    lowPercentage: totalToolFindings > 0 ? Math.round((lowConfCount / totalToolFindings) * 100) : 0,
+  };
+
   const analytics: AnalyticsData = {
     timeline,
     toolSources,
+    confidenceDistribution,
     avgReviewTimeSeconds,
     hasEnoughData: realReviewRuns.length >= 1,
     totalFindingsAnalyzed: totalToolFindings,

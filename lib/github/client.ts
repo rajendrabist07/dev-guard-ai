@@ -108,27 +108,54 @@ export async function postGitHubReviewComment(
   summaryText: string
 ): Promise<boolean> {
   try {
-    const comments = findings.map((finding) => ({
-      path: finding.file_path,
-      line: finding.line > 0 ? finding.line : 1,
-      body: `**[DevGuard AI - ${finding.severity.toUpperCase()}]** (${finding.tool_source ?? 'agent'})
+    // High and medium confidence findings become direct inline comments
+    const inlineFindings = findings.filter((f) => f.confidence !== 'low');
+    const lowConfidenceFindings = findings.filter((f) => f.confidence === 'low');
+
+    const comments = inlineFindings.map((finding) => {
+      const confidenceBadge = finding.confidence === 'high' ? '🔥 HIGH CONFIDENCE' : '⚖️ MEDIUM CONFIDENCE';
+      const corroborationText =
+        finding.corroboration_sources && finding.corroboration_sources.length > 1
+          ? `(Corroborated by: ${finding.corroboration_sources.join(', ')})`
+          : `(${finding.tool_source ?? 'agent'})`;
+
+      return {
+        path: finding.file_path,
+        line: finding.line > 0 ? finding.line : 1,
+        body: `**[DevGuard AI - ${finding.severity.toUpperCase()}]** \`${confidenceBadge}\` ${corroborationText}
+
 ${finding.message}
 
 ${finding.suggested_fix ? `\`\`\`suggestion\n${finding.suggested_fix}\n\`\`\`` : ''}`,
-    }));
+      };
+    });
+
+    let advisorySection = '';
+    if (lowConfidenceFindings.length > 0) {
+      advisorySection = `\n\n### 🔍 Worth a Second Look (Heuristic / Low-Confidence Flags)\n*The following items were flagged by a single static heuristic without multi-tool corroboration. Human reviewer judgment recommended:*\n\n` +
+        lowConfidenceFindings
+          .map(
+            (f) => `- **${f.file_path}:${f.line}** (${f.tool_source}): ${f.message}`
+          )
+          .join('\n');
+    }
+
+    const hasHighConfidenceCritical = findings.some(
+      (f) => f.severity === 'critical' && f.confidence !== 'low'
+    );
 
     await octokit.rest.pulls.createReview({
       owner,
       repo,
       pull_number: pullNumber,
       commit_id: commitSha,
-      event: findings.some((f) => f.severity === 'critical') ? 'REQUEST_CHANGES' : 'COMMENT',
-      body: `## DevGuard AI Security & Code Quality Review
+      event: hasHighConfidenceCritical ? 'REQUEST_CHANGES' : 'COMMENT',
+      body: `## 🛡️ DevGuard AI Security & Quality Review
 
-${summaryText}
+${summaryText}${advisorySection}
 
 ---
-*Reviewed by DevGuard AI Autonomous Agent. Capped 5-step iteration check.*`,
+*Autonomous Review by DevGuard AI with Multi-Tool Corroboration & Confidence Calibration.*`,
       comments: comments.slice(0, 10), // Limit to top 10 inline comments to avoid API overflow
     });
 

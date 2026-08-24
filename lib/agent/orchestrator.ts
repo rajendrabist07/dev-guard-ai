@@ -3,6 +3,7 @@ import { scanDependencies } from './tools/deps-scan';
 import { runLinter } from './tools/lint';
 import { runTests } from './tools/test-runner';
 import { synthesizeReviewWithLLM } from './llm';
+import { calibrateFindings } from './calibration';
 
 export interface ProgressUpdate {
   step: number;
@@ -258,9 +259,10 @@ export async function runAgentOrchestrator(
   });
   const synthesisMs = Date.now() - synthesisStart;
   const totalDurationMs = Date.now() - overallStart;
+  const calibratedFindings = calibrateFindings(findings);
 
   return {
-    findings,
+    findings: calibratedFindings,
     trace,
     toolCallsCount: trace.length,
     providerUsed: synthesis.provider,

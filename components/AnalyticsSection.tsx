@@ -22,10 +22,18 @@ interface AnalyticsSectionProps {
 }
 
 export default function AnalyticsSection({ analytics, loading = false }: AnalyticsSectionProps) {
-  const [activeChartTab, setActiveChartTab] = useState<'timeline' | 'sources'>('timeline');
+  const [activeChartTab, setActiveChartTab] = useState<'timeline' | 'sources' | 'confidence'>('timeline');
 
   const timeline = analytics?.timeline ?? [];
   const toolSources = analytics?.toolSources ?? [];
+  const confidence = analytics?.confidenceDistribution ?? {
+    highCount: 0,
+    mediumCount: 0,
+    lowCount: 0,
+    highPercentage: 0,
+    mediumPercentage: 0,
+    lowPercentage: 0,
+  };
   const hasEnoughData = Boolean(analytics?.hasEnoughData && (timeline.length > 0 || toolSources.length > 0));
 
   const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; color: string }>; label?: string }) => {
@@ -105,6 +113,17 @@ export default function AnalyticsSection({ analytics, loading = false }: Analyti
             <PieIcon className="w-3.5 h-3.5" />
             <span>Tool Breakdown</span>
           </button>
+          <button
+            onClick={() => setActiveChartTab('confidence')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-all ${
+              activeChartTab === 'confidence'
+                ? 'bg-emerald-500 text-black shadow-md shadow-emerald-500/20'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>Confidence</span>
+          </button>
         </div>
       </div>
 
@@ -163,7 +182,7 @@ export default function AnalyticsSection({ analytics, loading = false }: Analyti
                   </ResponsiveContainer>
                 </div>
               </div>
-            ) : (
+            ) : activeChartTab === 'sources' ? (
               <div className="space-y-4">
                 <div className="flex items-center justify-between text-xs text-gray-400 font-mono">
                   <span>Empirical Findings Attribution by Tool</span>
@@ -211,6 +230,48 @@ export default function AnalyticsSection({ analytics, loading = false }: Analyti
                         </div>
                       </div>
                     ))}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between text-xs text-gray-400 font-mono">
+                  <span>Finding Confidence Distribution (Corroboration-Calibrated)</span>
+                  <span>Selective Autonomy Telemetry</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="p-4 rounded-xl bg-gray-950/60 border border-gray-800/80 space-y-2">
+                    <div className="flex items-center justify-between text-xs text-emerald-400 font-semibold">
+                      <span>🔥 High Confidence</span>
+                      <span className="font-mono text-emerald-300 font-bold">{confidence.highPercentage}%</span>
+                    </div>
+                    <div className="text-2xl font-bold text-white font-mono">{confidence.highCount}</div>
+                    <p className="text-[11px] text-gray-400">
+                      Corroborated by 2+ independent tools or deterministic CVE lookups.
+                    </p>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-gray-950/60 border border-gray-800/80 space-y-2">
+                    <div className="flex items-center justify-between text-xs text-cyan-400 font-semibold">
+                      <span>⚖️ Medium Confidence</span>
+                      <span className="font-mono text-cyan-300 font-bold">{confidence.mediumPercentage}%</span>
+                    </div>
+                    <div className="text-2xl font-bold text-white font-mono">{confidence.mediumCount}</div>
+                    <p className="text-[11px] text-gray-400">
+                      Single-tool critical AST pattern match with direct fix recommendation.
+                    </p>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-gray-950/60 border border-gray-800/80 space-y-2">
+                    <div className="flex items-center justify-between text-xs text-amber-400 font-semibold">
+                      <span>🔍 Low Confidence (Hedged)</span>
+                      <span className="font-mono text-amber-300 font-bold">{confidence.lowPercentage}%</span>
+                    </div>
+                    <div className="text-2xl font-bold text-white font-mono">{confidence.lowCount}</div>
+                    <p className="text-[11px] text-gray-400">
+                      Single-source static heuristic. Explicitly routed for human engineer judgment.
+                    </p>
                   </div>
                 </div>
               </div>
