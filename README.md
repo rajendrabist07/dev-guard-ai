@@ -1,5 +1,9 @@
 # DevGuard AI
 
+[![CI Pipeline](https://github.com/rajendrabist07/dev-guard-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/rajendrabist07/dev-guard-ai/actions/workflows/ci.yml)
+[![Eval Accuracy Gate](https://dev-guard-ai.vercel.app/api/badge/eval-score)](evals/eval-results.json)
+[![License: MIT](https://img.shields.io/badge/License-MIT-emerald)](LICENSE)
+
 DevGuard AI is an automated code review service that analyzes GitHub pull requests by executing static analysis, dependency vulnerability scanning, and test verification before summarizing findings with an LLM. Rather than relying on single-shot LLM prompts on raw diffs, it invokes discrete diagnostic tools to collect concrete findings, surfaces suggested inline code fixes, and records structured execution traces.
 
 ---
