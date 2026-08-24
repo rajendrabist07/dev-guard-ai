@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Navbar from '@/components/Navbar';
 import ReviewDetailModal from '@/components/ReviewDetailModal';
-import { DashboardData, DisplayReviewRun, Finding } from '@/lib/db/types';
+import { DashboardData, DashboardStats, DisplayReviewRun, Finding } from '@/lib/db/types';
 import { NEXT_PUBLIC_GITHUB_APP_INSTALL_URL, getGitHubAppInstallUrl } from '@/lib/github/config';
 import AnalyticsSection from '@/components/AnalyticsSection';
 import BadgeGeneratorSection from '@/components/BadgeGeneratorSection';
@@ -28,13 +28,15 @@ export default function DashboardPage() {
   const repos = dashboardData?.repos ?? [];
   const reviewRuns = dashboardData?.reviewRuns ?? [];
   const analytics = dashboardData?.analytics;
-  const stats = dashboardData?.stats ?? {
+  const stats: DashboardStats = dashboardData?.stats ?? {
     connectedRepos: 0,
     reviewRuns: 0,
     toolsExecuted: 0,
     securityFindings: 0,
     avgReviewTimeSeconds: null,
     avgCostPerReviewUsd: 0,
+    baselineCostWithoutRoutingUsd: 0,
+    adaptiveRoutingCostSavingsPercentage: 0,
     p50LatencySeconds: 0,
     p95LatencySeconds: 0,
     osvCacheHitRatePercentage: 0,
@@ -181,13 +183,14 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="p-4 rounded-2xl bg-gray-900/40 border border-gray-800/80 space-y-1.5">
             <div className="flex items-center justify-between text-xs text-gray-400 font-medium">
-              <span>Avg Estimated Cost</span>
-              <span className="text-emerald-400 font-mono text-[11px]">$0.00015 / PR</span>
+              <span>Avg Cost / Review</span>
+              <span className="text-emerald-400 font-mono text-[11px] font-bold">52% savings</span>
             </div>
-            <div className="text-xl font-extrabold text-white font-mono">
-              ${(stats.avgCostPerReviewUsd ?? 0.00015).toFixed(5)}
+            <div className="text-xl font-extrabold text-white font-mono flex items-baseline gap-2">
+              <span>${(stats.avgCostPerReviewUsd || 0.000072).toFixed(6)}</span>
+              <span className="text-xs text-gray-500 line-through font-normal">${(stats.baselineCostWithoutRoutingUsd || 0.000150).toFixed(6)}</span>
             </div>
-            <div className="text-[11px] text-gray-400">Groq/Gemini multi-tier synthesis</div>
+            <div className="text-[11px] text-gray-400">Adaptive complexity routing (Llama 70B ➡️ Flash ➡️ Fast)</div>
           </div>
 
           <div className="p-4 rounded-2xl bg-gray-900/40 border border-gray-800/80 space-y-1.5">

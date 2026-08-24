@@ -100,6 +100,8 @@ export interface DashboardStats {
   securityFindings: number;
   avgReviewTimeSeconds: number | null;
   avgCostPerReviewUsd: number;
+  baselineCostWithoutRoutingUsd: number;
+  adaptiveRoutingCostSavingsPercentage: number;
   p50LatencySeconds: number;
   p95LatencySeconds: number;
   osvCacheHitRatePercentage: number;
