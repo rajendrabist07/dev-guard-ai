@@ -22,8 +22,14 @@ export async function runLinter(files: string[], codeContent?: string): Promise<
   const contentToScan = codeContent || '';
   const targetFile = files[0] || 'src/index.ts';
 
-  // 1. SQL Injection check
-  if (contentToScan.match(/SELECT|INSERT|UPDATE|DELETE/i) && contentToScan.match(/\+|=|`\$\{/)) {
+  // 1. SQL Injection check (Requires genuine SQL keyword syntax + dynamic string concatenation / template literal)
+  const hasSqlKeywords = /\b(SELECT|INSERT\s+INTO|UPDATE|DELETE\s+FROM)\b/i.test(contentToScan) && /\b(FROM|WHERE|VALUES|SET)\b/i.test(contentToScan);
+  const hasSqlConcatOrInterpolation =
+    /(?:['"`][\s\S]*?\b(?:SELECT|INSERT|UPDATE|DELETE|FROM|WHERE)\b[\s\S]*?['"`]\s*\+)|(?:\+\s*['"`][\s\S]*?\b(?:SELECT|INSERT|UPDATE|DELETE|FROM|WHERE)\b)|(?:\`[\s\S]*?\b(?:SELECT|INSERT|UPDATE|DELETE)\b[\s\S]*?\$\{[\s\S]*?\}\s*[\s\S]*?\`)/i.test(
+      contentToScan
+    );
+
+  if (hasSqlKeywords && hasSqlConcatOrInterpolation) {
     items.push({
       file: targetFile,
       line: 34,
@@ -58,11 +64,11 @@ export async function runLinter(files: string[], codeContent?: string): Promise<
     });
   }
 
-  // 4. Hardcoded Secrets / Tokens
-  if (
-    contentToScan.match(/['"`](sk_live_[a-zA-Z0-9]{20,}|ghp_[a-zA-Z0-9]{20,}|AIza[0-9A-Za-z-_]{35})['"`]/i) ||
-    contentToScan.match(/(?:api[_-]?key|secret|password|auth[_-]?token)\s*[:=]\s*['"`][^'"`\s]{8,}['"`]/i)
-  ) {
+  // 4. Hardcoded Secrets / Tokens (Requires literal credential string, excluding parameter references like webhookSecret)
+  const hasKnownSecretPrefix = /['"`](sk_live_[a-zA-Z0-9_-]{20,}|ghp_[a-zA-Z0-9_-]{20,}|AIza[0-9A-Za-z-_]{35})['"`]/i.test(contentToScan);
+  const hasGenericSecretAssignment = /(?:api[_-]?key|secret|password|auth[_-]?token)\s*[:=]\s*['"`]([a-zA-Z0-9_\-!@#$%^&*()]{16,})['"`]/i.test(contentToScan);
+
+  if (hasKnownSecretPrefix || hasGenericSecretAssignment) {
     items.push({
       file: targetFile,
       line: 14,

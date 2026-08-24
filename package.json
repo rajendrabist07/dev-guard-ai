@@ -15,7 +15,8 @@
     "test:badge": "npx tsx scripts/verify-badge-api.ts",
     "eval": "npx tsx evals/run-eval.ts",
     "eval:gate": "npx tsx evals/run-eval.ts --gate",
-    "eval:promote": "npx tsx evals/run-eval.ts --update-baseline"
+    "eval:promote": "npx tsx evals/run-eval.ts --update-baseline",
+    "eval:real": "npx tsx evals/run-real-world-eval.ts"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
