@@ -2,9 +2,12 @@
 
 [![CI Pipeline](https://github.com/rajendrabist07/dev-guard-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/rajendrabist07/dev-guard-ai/actions/workflows/ci.yml)
 [![Eval Accuracy Gate](https://dev-guard-ai.vercel.app/api/badge/eval-score)](evals/eval-results.json)
+[![Technical Case Study](https://img.shields.io/badge/Read-Technical_Case_Study-indigo)](docs/case-study.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-emerald)](LICENSE)
 
 DevGuard AI is an automated code review service that analyzes GitHub pull requests by executing static analysis, dependency vulnerability scanning, and test verification before summarizing findings with an LLM. Rather than relying on single-shot LLM prompts on raw diffs, it invokes discrete diagnostic tools to collect concrete findings, surfaces suggested inline code fixes, and records structured execution traces.
+
+> 📖 **Read the Full Technical Case Study**: [What I Learned Building an Eval-Gated, Cost-Aware AI Code Review Agent](docs/case-study.md) — an in-depth breakdown of empirical tool-calling, CI regression gating, real-world false-positive calibrations on 5 open-source codebases, and adaptive complexity routing saving 52% on token costs.
 
 ---
 
