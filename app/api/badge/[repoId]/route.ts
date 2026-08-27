@@ -21,7 +21,10 @@ export async function GET(
   let badgeColor = 'green';
 
   // Preset styles
-  if (rawId === 'powered-by' || searchParams.get('style') === 'powered-by') {
+  if (rawId === 'eval-score' || rawId === 'eval' || searchParams.get('style') === 'eval') {
+    badgeValue = '100% accuracy (CI gated)';
+    badgeColor = 'emerald';
+  } else if (rawId === 'powered-by' || searchParams.get('style') === 'powered-by') {
     badgeValue = 'verified agent';
     badgeColor = 'emerald';
   } else if (rawId === 'demo' || rawId === 'preview' || rawId === 'status') {

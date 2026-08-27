@@ -1,5 +1,6 @@
 export type Severity = 'critical' | 'warning' | 'info';
 export type ReviewStatus = 'pending' | 'running' | 'completed' | 'failed';
+export type ConfidenceLevel = 'high' | 'medium' | 'low';
 
 export interface Installation {
   id: string;
@@ -44,6 +45,9 @@ export interface Finding {
   message: string;
   suggested_fix: string | null;
   tool_source: string | null;
+  confidence?: ConfidenceLevel;
+  corroboration_sources?: string[];
+  human_judgment_recommended?: boolean;
 }
 
 export interface AgentTraceStep {
@@ -96,6 +100,8 @@ export interface DashboardStats {
   securityFindings: number;
   avgReviewTimeSeconds: number | null;
   avgCostPerReviewUsd: number;
+  baselineCostWithoutRoutingUsd: number;
+  adaptiveRoutingCostSavingsPercentage: number;
   p50LatencySeconds: number;
   p95LatencySeconds: number;
   osvCacheHitRatePercentage: number;
@@ -118,9 +124,19 @@ export interface ToolSourceBreakdown {
   color: string;
 }
 
+export interface ConfidenceBreakdown {
+  highCount: number;
+  mediumCount: number;
+  lowCount: number;
+  highPercentage: number;
+  mediumPercentage: number;
+  lowPercentage: number;
+}
+
 export interface AnalyticsData {
   timeline: FindingsTimelinePoint[];
   toolSources: ToolSourceBreakdown[];
+  confidenceDistribution?: ConfidenceBreakdown;
   avgReviewTimeSeconds: number | null;
   hasEnoughData: boolean;
   totalFindingsAnalyzed: number;

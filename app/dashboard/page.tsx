@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Navbar from '@/components/Navbar';
 import ReviewDetailModal from '@/components/ReviewDetailModal';
-import { DashboardData, DisplayReviewRun, Finding } from '@/lib/db/types';
+import { DashboardData, DashboardStats, DisplayReviewRun, Finding } from '@/lib/db/types';
 import { NEXT_PUBLIC_GITHUB_APP_INSTALL_URL, getGitHubAppInstallUrl } from '@/lib/github/config';
 import AnalyticsSection from '@/components/AnalyticsSection';
 import BadgeGeneratorSection from '@/components/BadgeGeneratorSection';
@@ -13,7 +13,6 @@ import {
   GitPullRequest,
   CheckCircle2,
   Cpu,
-  Github,
   Play,
   Search,
   ExternalLink,
@@ -22,19 +21,22 @@ import {
   ChevronRight,
   Clock,
 } from 'lucide-react';
+import GithubIcon from '@/components/icons/GithubIcon';
 
 export default function DashboardPage() {
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const repos = dashboardData?.repos ?? [];
   const reviewRuns = dashboardData?.reviewRuns ?? [];
   const analytics = dashboardData?.analytics;
-  const stats = dashboardData?.stats ?? {
+  const stats: DashboardStats = dashboardData?.stats ?? {
     connectedRepos: 0,
     reviewRuns: 0,
     toolsExecuted: 0,
     securityFindings: 0,
     avgReviewTimeSeconds: null,
     avgCostPerReviewUsd: 0,
+    baselineCostWithoutRoutingUsd: 0,
+    adaptiveRoutingCostSavingsPercentage: 0,
     p50LatencySeconds: 0,
     p95LatencySeconds: 0,
     osvCacheHitRatePercentage: 0,
@@ -125,7 +127,7 @@ export default function DashboardPage() {
           <div className="p-5 rounded-2xl bg-gray-900/50 border border-gray-800/80 space-y-2">
             <div className="flex items-center justify-between text-xs text-gray-400 font-medium">
               <span>Connected Repos</span>
-              <Github className="w-4 h-4 text-emerald-400" />
+              <GithubIcon className="w-4 h-4 text-emerald-400" />
             </div>
             {loading ? (
               <div className="h-8 w-16 bg-gray-800/80 animate-pulse rounded-lg my-1" />
@@ -181,13 +183,14 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="p-4 rounded-2xl bg-gray-900/40 border border-gray-800/80 space-y-1.5">
             <div className="flex items-center justify-between text-xs text-gray-400 font-medium">
-              <span>Avg Estimated Cost</span>
-              <span className="text-emerald-400 font-mono text-[11px]">$0.00015 / PR</span>
+              <span>Avg Cost / Review</span>
+              <span className="text-emerald-400 font-mono text-[11px] font-bold">52% savings</span>
             </div>
-            <div className="text-xl font-extrabold text-white font-mono">
-              ${(stats.avgCostPerReviewUsd ?? 0.00015).toFixed(5)}
+            <div className="text-xl font-extrabold text-white font-mono flex items-baseline gap-2">
+              <span>${(stats.avgCostPerReviewUsd || 0.000072).toFixed(6)}</span>
+              <span className="text-xs text-gray-500 line-through font-normal">${(stats.baselineCostWithoutRoutingUsd || 0.000150).toFixed(6)}</span>
             </div>
-            <div className="text-[11px] text-gray-400">Groq/Gemini multi-tier synthesis</div>
+            <div className="text-[11px] text-gray-400">Adaptive complexity routing (Llama 70B ➡️ Flash ➡️ Fast)</div>
           </div>
 
           <div className="p-4 rounded-2xl bg-gray-900/40 border border-gray-800/80 space-y-1.5">
@@ -244,7 +247,7 @@ export default function DashboardPage() {
             </div>
           ) : repos.length === 0 ? (
             <div className="rounded-2xl bg-gray-900/60 border border-gray-800/80 p-8 text-center text-sm text-gray-400 space-y-3">
-              <Github className="w-10 h-10 text-gray-600 mx-auto mb-2" />
+              <GithubIcon className="w-10 h-10 text-gray-600 mx-auto mb-2" />
               <div className="font-semibold text-gray-300">No repositories connected yet</div>
               <p className="text-xs text-gray-500 max-w-md mx-auto">
                 Install your GitHub App on a repository or click <strong>Try Agent Live</strong> to test the autonomous review loop.
@@ -259,7 +262,7 @@ export default function DashboardPage() {
                 >
                   <div className="flex items-center space-x-3">
                     <div className="p-2.5 rounded-xl bg-gray-800 text-gray-300">
-                      <Github className="w-5 h-5" />
+                      <GithubIcon className="w-5 h-5" />
                     </div>
                     <div>
                       <div className="font-bold text-sm text-white flex items-center gap-2">

@@ -40,9 +40,30 @@ interface EvaluationSummary {
   case_results: CaseEvaluationResult[];
 }
 
+interface BaselineConfig {
+  last_updated: string;
+  min_tool_precision: number;
+  min_tool_recall: number;
+  min_tool_f1: number;
+  min_severity_accuracy: number;
+  max_wasted_tool_rate: number;
+  require_docs_efficiency_pass: boolean;
+  baseline_scores: {
+    tool_selection_precision: number;
+    tool_selection_recall: number;
+    tool_selection_f1: number;
+    severity_accuracy: number;
+    wasted_tool_call_rate: number;
+    docs_efficiency_pass: boolean;
+  };
+}
+
+const shouldUpdateBaseline = process.argv.includes('--update-baseline');
+const isCiGateMode = process.argv.includes('--gate') || process.env.CI === 'true';
+
 async function runEvaluation() {
   console.log('\n============================================================');
-  console.log('🛡️  DEVGUARD AI — AGENT EVALUATION & BENCHMARK SUITE (W1)');
+  console.log('🛡️  DEVGUARD AI — AGENT EVALUATION & CI GATE SUITE');
   console.log('============================================================\n');
 
   const datasetPath = path.join(process.cwd(), 'evals', 'dataset.json');
@@ -64,13 +85,12 @@ async function runEvaluation() {
     const result = await runAgentOrchestrator(
       testCase.diff,
       testCase.files,
-      `eval-${testCase.id}`
+      `eval-run-${testCase.id}`
     );
 
     const caseDuration = Date.now() - caseStart;
     const actualTools = result.trace.map((t) => t.tool);
     const expectedSet = new Set(testCase.expected_tools_called);
-    const actualSet = new Set(actualTools);
 
     // Calculate Precision & Recall for Tool Selection
     const truePositives = actualTools.filter((t) => expectedSet.has(t)).length;
@@ -90,28 +110,30 @@ async function runEvaluation() {
           : 0
         : truePositives / expectedSet.size;
 
-    // Severity assessment
-    const criticals = result.findings.filter((f) => f.severity === 'critical').length;
-    const warnings = result.findings.filter((f) => f.severity === 'warning').length;
-    const infos = result.findings.filter((f) => f.severity === 'info').length;
+    totalPrecision += precision;
+    totalRecall += recall;
+    totalWastedCalls += falsePositives.length;
+    totalActualCalls += actualTools.length;
 
-    let actualSeverity: 'critical' | 'warning' | 'info' | 'none' = 'none';
-    if (criticals > 0) actualSeverity = 'critical';
-    else if (warnings > 0) actualSeverity = 'warning';
-    else if (infos > 0) actualSeverity = 'info';
-
-    const severityMatched = actualSeverity === testCase.expected_severity;
-
-    // Check docs-only efficiency (0 tools expected)
-    if (testCase.expected_tools_called.length === 0 && actualTools.length > 0) {
+    // Docs-only efficiency gate verification
+    if (testCase.id.includes('docs-') && actualTools.length > 0) {
       docsEfficiencyPass = false;
     }
 
-    totalPrecision += precision;
-    totalRecall += recall;
-    if (severityMatched) totalSeverityMatches += 1;
-    totalWastedCalls += falsePositives.length;
-    totalActualCalls += actualTools.length;
+    // Determine highest actual severity from findings
+    let actualSeverity: 'critical' | 'warning' | 'info' | 'none' = 'none';
+    if (result.findings.some((f) => f.severity === 'critical')) {
+      actualSeverity = 'critical';
+    } else if (result.findings.some((f) => f.severity === 'warning')) {
+      actualSeverity = 'warning';
+    } else if (result.findings.some((f) => f.severity === 'info')) {
+      actualSeverity = 'info';
+    }
+
+    const severityMatched = actualSeverity === testCase.expected_severity;
+    if (severityMatched) {
+      totalSeverityMatches++;
+    }
 
     const evalRecord: CaseEvaluationResult = {
       id: testCase.id,
@@ -163,19 +185,90 @@ async function runEvaluation() {
   const resultsPath = path.join(process.cwd(), 'evals', 'eval-results.json');
   fs.writeFileSync(resultsPath, JSON.stringify(summary, null, 2), 'utf8');
 
+  // Baseline management & comparison
+  const baselinePath = path.join(process.cwd(), 'evals', 'baseline.json');
+  let baseline: BaselineConfig | null = null;
+  if (fs.existsSync(baselinePath)) {
+    baseline = JSON.parse(fs.readFileSync(baselinePath, 'utf8'));
+  }
+
+  if (shouldUpdateBaseline) {
+    const updatedBaseline: BaselineConfig = {
+      last_updated: new Date().toISOString(),
+      min_tool_precision: Math.max(0, summary.tool_selection_precision - 2.0),
+      min_tool_recall: Math.max(0, summary.tool_selection_recall - 2.0),
+      min_tool_f1: Math.max(0, summary.tool_selection_f1 - 2.0),
+      min_severity_accuracy: Math.max(0, summary.severity_accuracy - 2.0),
+      max_wasted_tool_rate: Math.min(100, summary.wasted_tool_call_rate + 2.0),
+      require_docs_efficiency_pass: true,
+      baseline_scores: {
+        tool_selection_precision: summary.tool_selection_precision,
+        tool_selection_recall: summary.tool_selection_recall,
+        tool_selection_f1: summary.tool_selection_f1,
+        severity_accuracy: summary.severity_accuracy,
+        wasted_tool_call_rate: summary.wasted_tool_call_rate,
+        docs_efficiency_pass: summary.docs_efficiency_pass,
+      },
+    };
+    fs.writeFileSync(baselinePath, JSON.stringify(updatedBaseline, null, 2), 'utf8');
+    console.log(`\n✨ Baseline intentionally promoted and updated in evals/baseline.json`);
+  }
+
   console.log('\n============================================================');
   console.log('📊 EVALUATION SUMMARY SCORECARD');
   console.log('============================================================');
   console.log(`• Total Test Cases Evaluated : ${summary.total_cases}`);
-  console.log(`• Tool Selection Precision    : ${summary.tool_selection_precision}%`);
-  console.log(`• Tool Selection Recall       : ${summary.tool_selection_recall}%`);
-  console.log(`• Tool Selection F1 Score     : ${summary.tool_selection_f1}%`);
-  console.log(`• Severity Accuracy           : ${summary.severity_accuracy}%`);
-  console.log(`• Wasted Tool Call Rate (Cost): ${summary.wasted_tool_call_rate}%`);
+  console.log(`• Tool Selection Precision    : ${summary.tool_selection_precision}% (Threshold: ${baseline ? `${baseline.min_tool_precision}%` : 'N/A'})`);
+  console.log(`• Tool Selection Recall       : ${summary.tool_selection_recall}% (Threshold: ${baseline ? `${baseline.min_tool_recall}%` : 'N/A'})`);
+  console.log(`• Tool Selection F1 Score     : ${summary.tool_selection_f1}% (Threshold: ${baseline ? `${baseline.min_tool_f1}%` : 'N/A'})`);
+  console.log(`• Severity Accuracy           : ${summary.severity_accuracy}% (Threshold: ${baseline ? `${baseline.min_severity_accuracy}%` : 'N/A'})`);
+  console.log(`• Wasted Tool Call Rate (Cost): ${summary.wasted_tool_call_rate}% (Max Allowed: ${baseline ? `${baseline.max_wasted_tool_rate}%` : 'N/A'})`);
   console.log(`• Docs-Only Efficiency Gate   : ${summary.docs_efficiency_pass ? 'PASSED (Zero Wasted Calls)' : 'FAILED'}`);
   console.log(`• Total Evaluation Runtime    : ${(totalDuration / 1000).toFixed(2)}s`);
-  console.log(`• Dated Results Written To    : evals/eval-results.json`);
   console.log('============================================================\n');
+
+  // CI Evaluation Gate Check
+  if (baseline && (isCiGateMode || process.argv.includes('--gate'))) {
+    const regressions: string[] = [];
+
+    if (summary.tool_selection_precision < baseline.min_tool_precision) {
+      regressions.push(
+        `Tool Selection Precision (${summary.tool_selection_precision}%) dropped below baseline threshold (${baseline.min_tool_precision}%)`
+      );
+    }
+    if (summary.tool_selection_recall < baseline.min_tool_recall) {
+      regressions.push(
+        `Tool Selection Recall (${summary.tool_selection_recall}%) dropped below baseline threshold (${baseline.min_tool_recall}%)`
+      );
+    }
+    if (summary.tool_selection_f1 < baseline.min_tool_f1) {
+      regressions.push(
+        `Tool Selection F1 Score (${summary.tool_selection_f1}%) dropped below baseline threshold (${baseline.min_tool_f1}%)`
+      );
+    }
+    if (summary.severity_accuracy < baseline.min_severity_accuracy) {
+      regressions.push(
+        `Severity Accuracy (${summary.severity_accuracy}%) dropped below baseline threshold (${baseline.min_severity_accuracy}%)`
+      );
+    }
+    if (summary.wasted_tool_call_rate > baseline.max_wasted_tool_rate) {
+      regressions.push(
+        `Wasted Tool Call Rate (${summary.wasted_tool_call_rate}%) exceeded maximum allowed rate (${baseline.max_wasted_tool_rate}%)`
+      );
+    }
+    if (baseline.require_docs_efficiency_pass && !summary.docs_efficiency_pass) {
+      regressions.push(`Docs-Only Efficiency Gate failed: tools were invoked unnecessarily on markdown documentation files`);
+    }
+
+    if (regressions.length > 0) {
+      console.error('❌ CI EVALUATION GATE FAILED: The following score regressions were detected:\n');
+      regressions.forEach((r, idx) => console.error(`  ${idx + 1}. ${r}`));
+      console.error('\n🛑 Build blocked to prevent silent accuracy or cost regressions.\n');
+      process.exit(1);
+    } else {
+      console.log('✅ CI EVALUATION GATE PASSED: All scores meet or exceed baseline threshold invariants.\n');
+    }
+  }
 }
 
 runEvaluation().catch((err) => {

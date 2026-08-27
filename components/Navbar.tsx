@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { ShieldAlert, Github, LayoutDashboard, Cpu, Activity } from 'lucide-react';
+import { ShieldAlert, LayoutDashboard, Cpu, Activity } from 'lucide-react';
+import GithubIcon from '@/components/icons/GithubIcon';
 import { getGitHubAppInstallUrl } from '@/lib/github/config';
 
 export default function Navbar() {
@@ -46,7 +47,7 @@ export default function Navbar() {
             className="flex items-center space-x-2 text-sm font-medium text-gray-300 hover:text-white transition-colors"
             title="Install GitHub App on your repositories"
           >
-            <Github className="w-4 h-4 text-emerald-400" />
+            <GithubIcon className="w-4 h-4 text-emerald-400" />
             <span className="hidden sm:inline">Install GitHub App</span>
           </a>
           <Link

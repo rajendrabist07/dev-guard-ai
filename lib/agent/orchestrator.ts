@@ -3,6 +3,9 @@ import { scanDependencies } from './tools/deps-scan';
 import { runLinter } from './tools/lint';
 import { runTests } from './tools/test-runner';
 import { synthesizeReviewWithLLM } from './llm';
+import { calibrateFindings } from './calibration';
+import { classifyDiffComplexity, ComplexityAnalysis } from './router';
+import { logger } from '@/lib/observability/logger';
 
 export interface ProgressUpdate {
   step: number;
@@ -32,6 +35,7 @@ export interface OrchestrationResult {
   latencies: StageLatencies;
   tokenCount: number;
   estimatedCostUsd: number;
+  complexityRouting?: ComplexityAnalysis;
 }
 
 const MAX_ITERATIONS = 5;
@@ -97,6 +101,17 @@ export async function runAgentOrchestrator(
   reviewRunId = 'sim-run',
   onProgress?: (progress: ProgressUpdate) => void | Promise<void>
 ): Promise<OrchestrationResult> {
+  // Pre-Execution Adaptive Complexity Classification & Routing
+  const complexityRouting = classifyDiffComplexity(prDiff, fileNames);
+  logger.info(`Adaptive model routing decision: ${complexityRouting.complexity.toUpperCase()} (${complexityRouting.recommendedModelTier})`, {
+    module: 'orchestrator',
+    reviewRunId,
+    complexity: complexityRouting.complexity,
+    reason: complexityRouting.reason,
+    recommendedTier: complexityRouting.recommendedModelTier,
+    costSavings: `${complexityRouting.costSavingsPercentage}%`,
+  });
+
   const trace: AgentTraceStep[] = [];
   const findings: NewFinding[] = [];
   const totalSteps = 4;
@@ -116,6 +131,30 @@ export async function runAgentOrchestrator(
   let linterMs = 0;
   let depsScanMs = 0;
   let testRunnerMs = 0;
+
+  // Fast-Path for Trivial Diffs (Docs-only / zero logic): Skip expensive agentic loops
+  if (complexityRouting.complexity === 'trivial') {
+    const summary = '✅ Automated review completed via fast-path. Documentation/asset diff validated with 0 diagnostic findings.';
+    return {
+      findings: [],
+      trace: [],
+      toolCallsCount: 0,
+      providerUsed: 'Deterministic Engine (Fast-Path)',
+      modelUsed: 'deterministic-router',
+      fallbackTriggered: false,
+      summary,
+      latencies: {
+        linterMs: 0,
+        depsScanMs: 0,
+        testRunnerMs: 0,
+        synthesisMs: 0,
+        totalDurationMs: Date.now() - overallStart,
+      },
+      tokenCount: 0,
+      estimatedCostUsd: 0.000000,
+      complexityRouting,
+    };
+  }
 
   // Step 1: AST Linter
   let lintSummary = 'AST Linter skipped (non-code diff)';
@@ -258,9 +297,10 @@ export async function runAgentOrchestrator(
   });
   const synthesisMs = Date.now() - synthesisStart;
   const totalDurationMs = Date.now() - overallStart;
+  const calibratedFindings = calibrateFindings(findings);
 
   return {
-    findings,
+    findings: calibratedFindings,
     trace,
     toolCallsCount: trace.length,
     providerUsed: synthesis.provider,
@@ -277,5 +317,6 @@ export async function runAgentOrchestrator(
     },
     tokenCount: synthesis.telemetry.totalTokens,
     estimatedCostUsd: synthesis.telemetry.estimatedCostUsd,
+    complexityRouting,
   };
 }

@@ -1,0 +1,17 @@
+{
+  "last_updated": "2026-08-21T13:27:00.000Z",
+  "min_tool_precision": 98.0,
+  "min_tool_recall": 98.0,
+  "min_tool_f1": 98.0,
+  "min_severity_accuracy": 98.0,
+  "max_wasted_tool_rate": 2.0,
+  "require_docs_efficiency_pass": true,
+  "baseline_scores": {
+    "tool_selection_precision": 100.0,
+    "tool_selection_recall": 100.0,
+    "tool_selection_f1": 100.0,
+    "severity_accuracy": 100.0,
+    "wasted_tool_call_rate": 0.0,
+    "docs_efficiency_pass": true
+  }
+}

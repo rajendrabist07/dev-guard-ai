@@ -17,7 +17,12 @@ export async function runTests(testFilePath?: string, diffSnippet?: string): Pro
   const content = diffSnippet || '';
 
   try {
-    if (content.includes('SELECT') || content.includes('userId') || content.includes('checkout')) {
+    const hasUnsafeSql =
+      /\b(SELECT|INSERT\s+INTO|UPDATE|DELETE\s+FROM)\b/i.test(content) &&
+      (/\bFROM\b/i.test(content) || /\bWHERE\b/i.test(content)) &&
+      (content.includes('+') || content.includes('${'));
+
+    if (hasUnsafeSql) {
       failures.push({
         testName: 'checkout signature & database query security assertion',
         filePath: targetFile,
