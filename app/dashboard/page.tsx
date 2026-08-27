@@ -13,7 +13,6 @@ import {
   GitPullRequest,
   CheckCircle2,
   Cpu,
-  Github,
   Play,
   Search,
   ExternalLink,
@@ -22,6 +21,7 @@ import {
   ChevronRight,
   Clock,
 } from 'lucide-react';
+import GithubIcon from '@/components/icons/GithubIcon';
 
 export default function DashboardPage() {
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
@@ -127,7 +127,7 @@ export default function DashboardPage() {
           <div className="p-5 rounded-2xl bg-gray-900/50 border border-gray-800/80 space-y-2">
             <div className="flex items-center justify-between text-xs text-gray-400 font-medium">
               <span>Connected Repos</span>
-              <Github className="w-4 h-4 text-emerald-400" />
+              <GithubIcon className="w-4 h-4 text-emerald-400" />
             </div>
             {loading ? (
               <div className="h-8 w-16 bg-gray-800/80 animate-pulse rounded-lg my-1" />
@@ -247,7 +247,7 @@ export default function DashboardPage() {
             </div>
           ) : repos.length === 0 ? (
             <div className="rounded-2xl bg-gray-900/60 border border-gray-800/80 p-8 text-center text-sm text-gray-400 space-y-3">
-              <Github className="w-10 h-10 text-gray-600 mx-auto mb-2" />
+              <GithubIcon className="w-10 h-10 text-gray-600 mx-auto mb-2" />
               <div className="font-semibold text-gray-300">No repositories connected yet</div>
               <p className="text-xs text-gray-500 max-w-md mx-auto">
                 Install your GitHub App on a repository or click <strong>Try Agent Live</strong> to test the autonomous review loop.
@@ -262,7 +262,7 @@ export default function DashboardPage() {
                 >
                   <div className="flex items-center space-x-3">
                     <div className="p-2.5 rounded-xl bg-gray-800 text-gray-300">
-                      <Github className="w-5 h-5" />
+                      <GithubIcon className="w-5 h-5" />
                     </div>
                     <div>
                       <div className="font-bold text-sm text-white flex items-center gap-2">
