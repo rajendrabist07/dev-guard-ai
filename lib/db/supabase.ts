@@ -13,7 +13,7 @@ import {
   ToolSourceBreakdown,
   TryRun,
 } from './types';
-import { getCacheStats } from '@/lib/cache/redis';
+import { getCacheStats, getCachedValue, setCachedValue } from '@/lib/cache/redis';
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -329,12 +329,39 @@ export async function getDashboardData(accessibleRepoIds?: string[]): Promise<Da
   };
 }
 
+export async function saveSimulationRun(
+  run: DisplayReviewRun,
+  findings: Finding[]
+): Promise<void> {
+  // 1. Always update local cache
+  inMemorySimulations.set(run.id, { run, findings });
+
+  // 2. Persist to Redis (24h TTL) for zero-loss multi-instance serverless retrieval
+  try {
+    await setCachedValue(`sim_run:${run.id}`, { run, findings }, 86400);
+  } catch (err) {
+    console.warn('Redis simulation persistence fallback:', err);
+  }
+}
+
 export async function getReviewRunById(id: string): Promise<{ run: DisplayReviewRun | null; findings: Finding[] }> {
-  // Check in-memory simulation cache first
+  // Tier 1: Check in-memory simulation cache first
   if (inMemorySimulations.has(id)) {
     return inMemorySimulations.get(id)!;
   }
 
+  // Tier 2: Check persistent Redis cache (for cross-instance serverless simulation sharing)
+  try {
+    const cachedSimulation = await getCachedValue<{ run: DisplayReviewRun; findings: Finding[] }>(`sim_run:${id}`);
+    if (cachedSimulation) {
+      inMemorySimulations.set(id, cachedSimulation);
+      return cachedSimulation;
+    }
+  } catch (err) {
+    console.warn('Redis simulation lookup failed:', err);
+  }
+
+  // Tier 3: Query persistent Supabase PostgreSQL
   try {
     const db = requireSupabaseAdmin();
     const { data: run, error: runError } = await db.from('review_runs').select('*').eq('id', id).maybeSingle();
@@ -527,8 +554,15 @@ export async function createTryRun(input: {
     created_at: now,
   };
 
-  // Cache in memory for instant retrieval
+  // 1. Cache in memory for instant retrieval
   inMemoryTryRuns.set(tryId, record);
+
+  // 2. Persist to Redis (24h TTL) for multi-instance serverless retrieval
+  try {
+    await setCachedValue(`try_run:${tryId}`, record, 86400);
+  } catch (err) {
+    console.warn('Redis try_runs persistence fallback:', err);
+  }
 
   if (supabaseAdmin) {
     try {
@@ -570,6 +604,7 @@ export async function createTryRun(input: {
           created_at: data.created_at,
         };
         inMemoryTryRuns.set(saved.id, saved);
+        await setCachedValue(`try_run:${saved.id}`, saved, 86400);
         return saved;
       }
     } catch (dbErr) {
@@ -581,11 +616,23 @@ export async function createTryRun(input: {
 }
 
 export async function getTryRunById(id: string): Promise<TryRun | null> {
-  // Check in-memory map first
+  // Tier 1: Check in-memory map first
   if (inMemoryTryRuns.has(id)) {
     return inMemoryTryRuns.get(id)!;
   }
 
+  // Tier 2: Check persistent Redis cache (for cross-instance serverless execution)
+  try {
+    const cached = await getCachedValue<TryRun>(`try_run:${id}`);
+    if (cached) {
+      inMemoryTryRuns.set(id, cached);
+      return cached;
+    }
+  } catch (err) {
+    console.warn('Redis try_run lookup failed:', err);
+  }
+
+  // Tier 3: Query Supabase PostgreSQL database
   if (supabaseAdmin) {
     try {
       const { data, error } = await supabaseAdmin

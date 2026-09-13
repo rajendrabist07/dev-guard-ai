@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-09-13T18:46:20.456Z",
+  "timestamp": "2026-09-13T18:51:50.312Z",
   "total_real_world_diffs": 20,
   "repositories_evaluated": [
     "shadcn-ui/taxonomy",
@@ -32,7 +32,7 @@
         "runLinter",
         "runTests"
       ],
-      "duration_ms": 4
+      "duration_ms": 5
     },
     {
       "id": "taxonomy-pr-118-user-query",
@@ -46,7 +46,7 @@
         "runLinter",
         "runTests"
       ],
-      "duration_ms": 2
+      "duration_ms": 1
     },
     {
       "id": "taxonomy-pr-142-markdown-render",
@@ -72,7 +72,7 @@
       "tools_called": [
         "scanDependencies"
       ],
-      "duration_ms": 0
+      "duration_ms": 1
     },
     {
       "id": "calcom-pr-4012-stripe-webhook",
@@ -85,7 +85,7 @@
       "tools_called": [
         "runLinter"
       ],
-      "duration_ms": 1
+      "duration_ms": 0
     },
     {
       "id": "calcom-pr-4180-raw-user-lookup",
@@ -124,7 +124,7 @@
       "tools_called": [
         "scanDependencies"
       ],
-      "duration_ms": 1356
+      "duration_ms": 1055
     },
     {
       "id": "dub-pr-321-qr-code-styling",
@@ -137,7 +137,7 @@
       "tools_called": [
         "runLinter"
       ],
-      "duration_ms": 0
+      "duration_ms": 1
     },
     {
       "id": "dub-pr-355-analytics-ingest",
@@ -151,7 +151,7 @@
         "runLinter",
         "runTests"
       ],
-      "duration_ms": 1
+      "duration_ms": 0
     },
     {
       "id": "dub-pr-389-exposed-client-token",
@@ -164,7 +164,7 @@
       "tools_called": [
         "runLinter"
       ],
-      "duration_ms": 0
+      "duration_ms": 1
     },
     {
       "id": "dub-pr-412-readme-docs-update",
@@ -214,7 +214,7 @@
       "tools_called": [
         "scanDependencies"
       ],
-      "duration_ms": 1
+      "duration_ms": 0
     },
     {
       "id": "novu-pr-2310-eslint-config-cleanup",
@@ -238,7 +238,7 @@
       "tools_called": [
         "runLinter"
       ],
-      "duration_ms": 0
+      "duration_ms": 1
     },
     {
       "id": "create-t3-app-pr-912-dead-code-variable",
@@ -265,7 +265,7 @@
       "tools_called": [
         "runLinter"
       ],
-      "duration_ms": 1
+      "duration_ms": 0
     },
     {
       "id": "create-t3-app-pr-980-contributing-guide",
