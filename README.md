@@ -140,9 +140,33 @@ Evaluated across 20 real pull request diffs from external repositories not contr
 
 ---
 
+## Security & Architecture Notes
+
+### 1. Row-Level Security (RLS) & Multi-Tenant IDOR Prevention
+- **Database Isolation**: PostgreSQL Row-Level Security is strictly enabled across all five core tables (`installations`, `repos`, `review_runs`, `findings`, `try_runs`).
+- **Granular Ownership Policies**: Tenant access is constrained using `auth.uid() = user_id` and subquery matching on `installation_id`.
+- **Zero-Trust Route Verification**: In [`lib/security/auth.ts`](lib/security/auth.ts), `verifyAuthenticatedUser` and `verifyRepoAccess` prevent Insecure Direct Object Reference (IDOR) attacks across `/api/reviews/[id]` and `/api/dashboard`, rejecting unauthorized cross-tenant requests with `HTTP 403 Forbidden`.
+
+### 2. Indirect Prompt Injection Defenses & Consistency Guard
+- **XML Boundary Tagging**: Untrusted pull request diffs and titles are stripped of escape characters and isolated inside `<untrusted_pr_title>` and `<untrusted_diff>` XML delimiters.
+- **Empirical Tool Consistency Guard**: In [`lib/agent/llm.ts`](lib/agent/llm.ts), `verifyToolConsistencyGuard` cross-verifies LLM summaries against deterministic tool outputs. If empirical tools flag critical security findings or vulnerabilities, but the synthesized LLM output attempts to declare an unearned approval ("LGTM" / "no issues found"), the output is overruled and flagged as `⚠️ [Agent Uncertain — Flagged for Human Review]`.
+
+### 3. Non-Blocking Async Webhook Pipeline & Safety Watchdog
+- **Sub-100ms Immediate Acknowledgment**: GitHub webhook deliveries are acknowledged in `< 100ms` with `HTTP 202 Accepted` to stay well within GitHub's 10-second timeout.
+- **Next.js 15 `after()` Background Orchestration**: Heavy static analysis, live OSV.dev querying, and LLM synthesis run asynchronously without blocking the serverless response thread.
+- **120-Second Timeout Watchdog**: A background watchdog automatically transitions stuck or orphaned runs to status `'failed'` with actionable diagnostics, preventing infinite "running" spinners.
+- **Real Git Diff Hunk Line Mapping**: [`parseDiffModifiedLines`](lib/github/client.ts) extracts modified line intervals from git unified diff headers (`@@ -l,s +l,s @@`). Findings on modified lines are posted as inline diff annotations, while findings on unmodified context lines route to top-level PR comments, eliminating Octokit HTTP 422 errors.
+
+### 4. Honest Diagnostic Tool Capabilities
+- **Pattern-Based Static Analysis (`runLinter`)**: Analyzes code patterns for security invariants (SQL injection string concatenation, unhandled async fetch rejections, hardcoded secrets, and unsafe cookie flags) with dynamic line detection.
+- **Dynamic Dependency Scanner (`scanDependencies`)**: Dynamically parses package manifests and git diff additions, querying the live OSV.dev REST API with a 24-hour Upstash Redis caching layer.
+- **Security Invariant Assertion Engine (`runTests`)**: Validates code changes against parameterized query invariants and async error handling invariants, returning empirical assertion metrics (`totalAssertionsChecked`, `passedAssertions`, `failedAssertions`).
+
+---
+
 ## Known Limitations
 
-- **Language Scope**: AST linting is currently implemented for TypeScript, JavaScript, JSON, and common web configuration files. Python, Go, and Rust AST rules are not yet implemented.
+- **Language Scope**: Static analysis rules are currently implemented for TypeScript, JavaScript, JSON, and common web configuration files. Python, Go, and Rust static rules are not yet implemented.
 - **PR Diff Size Limits**: Diffs exceeding 500 KB or 50 modified files are truncated to prevent memory pressure and stay within token context limits.
 - **Monorepo Manifest Resolution**: Lockfile dependency resolution currently parses root `package.json` files and top-level workspace definitions; nested sub-package manifests in non-standard monorepo layouts require root-level symlinks.
 - **Free-Tier Model Rate Limits**: Groq free-tier rate limits (~30 RPM) may trigger the Gemini 2.5 Flash fallback under high concurrent load.
