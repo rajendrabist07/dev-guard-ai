@@ -38,11 +38,17 @@ function requireSupabaseAdmin() {
 import { getGitHubAppInstallUrl } from '@/lib/github/config';
 export { getGitHubAppInstallUrl };
 
-export async function getRepos(): Promise<Repo[]> {
+export async function getRepos(accessibleRepoIds?: string[]): Promise<Repo[]> {
   try {
     const db = requireSupabaseAdmin();
-    const { data, error } = await db.from('repos').select('*').order('created_at', { ascending: false });
+    let query = db.from('repos').select('*').order('created_at', { ascending: false });
+    if (accessibleRepoIds && accessibleRepoIds.length > 0) {
+      query = query.in('id', accessibleRepoIds);
+    } else if (accessibleRepoIds && accessibleRepoIds.length === 0) {
+      return [];
+    }
 
+    const { data, error } = await query;
     if (error) {
       console.warn(`Repositories table query: ${error.message}`);
       return [];
@@ -54,11 +60,17 @@ export async function getRepos(): Promise<Repo[]> {
   }
 }
 
-export async function getReviewRuns(): Promise<DisplayReviewRun[]> {
+export async function getReviewRuns(accessibleRepoIds?: string[]): Promise<DisplayReviewRun[]> {
   try {
     const db = requireSupabaseAdmin();
-    const { data, error } = await db.from('review_runs').select('*').order('started_at', { ascending: false });
+    let query = db.from('review_runs').select('*').order('started_at', { ascending: false });
+    if (accessibleRepoIds && accessibleRepoIds.length > 0) {
+      query = query.in('repo_id', accessibleRepoIds);
+    } else if (accessibleRepoIds && accessibleRepoIds.length === 0) {
+      return [];
+    }
 
+    const { data, error } = await query;
     if (error) {
       console.warn(`Review runs table query: ${error.message}`);
       return [];
@@ -70,11 +82,17 @@ export async function getReviewRuns(): Promise<DisplayReviewRun[]> {
   }
 }
 
-export async function getFindings(): Promise<Finding[]> {
+export async function getFindings(accessibleRunIds?: string[]): Promise<Finding[]> {
   try {
     const db = requireSupabaseAdmin();
-    const { data, error } = await db.from('findings').select('*').order('created_at', { ascending: false });
+    let query = db.from('findings').select('*').order('created_at', { ascending: false });
+    if (accessibleRunIds && accessibleRunIds.length > 0) {
+      query = query.in('review_run_id', accessibleRunIds);
+    } else if (accessibleRunIds && accessibleRunIds.length === 0) {
+      return [];
+    }
 
+    const { data, error } = await query;
     if (error) {
       console.warn(`Findings table query: ${error.message}`);
       return [];
@@ -86,7 +104,7 @@ export async function getFindings(): Promise<Finding[]> {
   }
 }
 
-export async function getDashboardData(): Promise<DashboardData> {
+export async function getDashboardData(accessibleRepoIds?: string[]): Promise<DashboardData> {
   const installUrl = getGitHubAppInstallUrl();
 
   const cacheStats = getCacheStats();
@@ -130,12 +148,13 @@ export async function getDashboardData(): Promise<DashboardData> {
     };
   }
 
-  const [repos, reviewRuns, findings] = await Promise.all([getRepos(), getReviewRuns(), getFindings()]);
+  const [repos, reviewRuns] = await Promise.all([getRepos(accessibleRepoIds), getReviewRuns(accessibleRepoIds)]);
   const realRepos = repos.filter(
     (repo) => repo.is_active && !repo.full_name.toLowerCase().includes('simulated') && repo.installation_id !== 'simulation'
   );
   const realReviewRuns = reviewRuns.filter((run) => !run.is_simulation);
   const realRunIds = new Set(realReviewRuns.map((run) => run.id));
+  const findings = await getFindings(Array.from(realRunIds));
   const realFindings = findings.filter((finding) => realRunIds.has(finding.review_run_id));
   
   // DATA INVARIANT GUARANTEE:

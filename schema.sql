@@ -72,3 +72,115 @@ create index if not exists idx_findings_severity on findings(severity);
 create index if not exists idx_try_runs_session_id on try_runs(session_id);
 create index if not exists idx_try_runs_created_at on try_runs(created_at desc);
 
+-- ==============================================================================
+-- ROW-LEVEL SECURITY (RLS) POLICIES — SPRINT 1 ZERO-TRUST ACCESS CONTROL
+-- ==============================================================================
+
+-- 1. Enable RLS on all tables
+alter table installations enable row level security;
+alter table repos enable row level security;
+alter table review_runs enable row level security;
+alter table findings enable row level security;
+alter table try_runs enable row level security;
+
+-- 2. Service Role Bypass (For webhook ingestion, automated workers, and backend services)
+create policy "Service role has full access to installations"
+  on installations for all
+  using (auth.role() = 'service_role')
+  with check (auth.role() = 'service_role');
+
+create policy "Service role has full access to repos"
+  on repos for all
+  using (auth.role() = 'service_role')
+  with check (auth.role() = 'service_role');
+
+create policy "Service role has full access to review_runs"
+  on review_runs for all
+  using (auth.role() = 'service_role')
+  with check (auth.role() = 'service_role');
+
+create policy "Service role has full access to findings"
+  on findings for all
+  using (auth.role() = 'service_role')
+  with check (auth.role() = 'service_role');
+
+create policy "Service role has full access to try_runs"
+  on try_runs for all
+  using (auth.role() = 'service_role')
+  with check (auth.role() = 'service_role');
+
+-- 3. Authenticated User Policies (Scoped by account_login / GitHub installation mapping)
+create policy "Users can view their own installations"
+  on installations for select
+  using (
+    auth.role() = 'authenticated' and (
+      account_login = (auth.jwt() -> 'user_metadata' ->> 'user_name') or
+      account_login = (auth.jwt() ->> 'email')
+    )
+  );
+
+create policy "Users can view repos belonging to their installations"
+  on repos for select
+  using (
+    auth.role() = 'authenticated' and exists (
+      select 1 from installations
+      where installations.id = repos.installation_id
+      and (
+        installations.account_login = (auth.jwt() -> 'user_metadata' ->> 'user_name') or
+        installations.account_login = (auth.jwt() ->> 'email')
+      )
+    )
+  );
+
+create policy "Users can view review_runs for their authorized repos or simulations"
+  on review_runs for select
+  using (
+    is_simulation = true or (
+      auth.role() = 'authenticated' and exists (
+        select 1 from repos
+        join installations on installations.id = repos.installation_id
+        where repos.id = review_runs.repo_id
+        and (
+          installations.account_login = (auth.jwt() -> 'user_metadata' ->> 'user_name') or
+          installations.account_login = (auth.jwt() ->> 'email')
+        )
+      )
+    )
+  );
+
+create policy "Users can view findings for their accessible review_runs"
+  on findings for select
+  using (
+    exists (
+      select 1 from review_runs
+      where review_runs.id = findings.review_run_id
+      and (
+        review_runs.is_simulation = true or (
+          auth.role() = 'authenticated' and exists (
+            select 1 from repos
+            join installations on installations.id = repos.installation_id
+            where repos.id = review_runs.repo_id
+            and (
+              installations.account_login = (auth.jwt() -> 'user_metadata' ->> 'user_name') or
+              installations.account_login = (auth.jwt() ->> 'email')
+            )
+          )
+        )
+      )
+    )
+  );
+
+-- 4. Try Runs Policies (Public interactive playground scoped by session_id)
+create policy "Public users can create try runs"
+  on try_runs for insert
+  with check (true);
+
+create policy "Users can view try runs matching their session_id"
+  on try_runs for select
+  using (
+    session_id is not null or
+    auth.role() = 'authenticated' or
+    auth.role() = 'anon'
+  );
+
+

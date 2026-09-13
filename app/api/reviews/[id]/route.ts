@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getReviewRunById } from '@/lib/db/supabase';
+import { authenticateRequest, verifyReviewRunOwnership } from '@/lib/security/auth';
 
 export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
@@ -9,6 +10,17 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
 
     if (!run) {
       return NextResponse.json({ error: 'Review run not found' }, { status: 404 });
+    }
+
+    // Defense in Depth: Explicit application-layer ownership verification
+    const auth = await authenticateRequest(req);
+    const hasAccess = await verifyReviewRunOwnership(run, auth);
+
+    if (!hasAccess) {
+      return NextResponse.json(
+        { error: 'Forbidden: You do not have permission to access this review run.' },
+        { status: 403 }
+      );
     }
 
     return NextResponse.json({
