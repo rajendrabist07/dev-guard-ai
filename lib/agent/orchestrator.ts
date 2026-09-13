@@ -156,8 +156,8 @@ export async function runAgentOrchestrator(
     };
   }
 
-  // Step 1: AST Linter
-  let lintSummary = 'AST Linter skipped (non-code diff)';
+  // Step 1: Pattern-based Linter
+  let lintSummary = 'Static Linter skipped (non-code diff)';
   let lintCount = 0;
 
   if (trace.length < MAX_ITERATIONS && shouldRunLinter(prDiff, fileNames)) {
@@ -165,7 +165,7 @@ export async function runAgentOrchestrator(
       await onProgress({
         step: 1,
         totalSteps,
-        message: 'Analyzing code structure & executing AST Linter...',
+        message: 'Analyzing code structure & executing pattern-based static analysis...',
         tool: 'runLinter',
       });
     }
@@ -189,8 +189,8 @@ export async function runAgentOrchestrator(
         });
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'AST Linter parser failure';
-      lintSummary = `AST Linter skipped: ${msg}`;
+      const msg = err instanceof Error ? err.message : 'Static Linter failure';
+      lintSummary = `Static Linter skipped: ${msg}`;
       recordTrace('runLinter', { files: fileNames }, { error: msg, skipped: true });
     }
     linterMs = Date.now() - stageStart;
@@ -236,22 +236,22 @@ export async function runAgentOrchestrator(
     depsScanMs = Date.now() - stageStart;
   }
 
-  // Step 3: Test Suite Runner
+  // Step 3: Test Assertion Validator
   if (onProgress) {
     await onProgress({
       step: 3,
       totalSteps,
-      message: 'Executing programmatic test suite validation...',
+      message: 'Validating security & reliability invariant assertions...',
       tool: 'runTests',
     });
   }
 
-  let testSummary = 'Test suite skipped (non-executable diff)';
+  let testSummary = 'Test assertion validation skipped (non-executable diff)';
   if (trace.length < MAX_ITERATIONS && shouldRunTests(prDiff)) {
     const stageStart = Date.now();
     try {
       const testResult = await runTests(undefined, prDiff);
-      recordTrace('runTests', { command: 'npm test' }, toRecord(testResult));
+      recordTrace('runTests', { assertionType: 'security_invariants' }, toRecord(testResult));
       testSummary = testResult.summary;
 
       for (const failure of testResult.failures) {

@@ -30,9 +30,9 @@ flowchart TD
 
     subgraph Orchestration ["Agent Orchestrator (lib/agent/orchestrator.ts)"]
         DiffFilter["Diff Scope & File Classifier"]
-        Linter["AST Security Linter (runLinter)"]
+        Linter["Static Pattern Linter (runLinter)"]
         Deps["OSV.dev CVE Lookup (scanDependencies)"]
-        Tests["Test Runner (runTests)"]
+        Tests["Security Invariant Validator (runTests)"]
         Synthesis["Multi-Tier LLM Synthesis (Groq / Gemini / Fallback)"]
     end
 
@@ -82,8 +82,8 @@ flowchart TD
 ## Design Decisions & Tradeoffs
 
 ### 1. Tool-Calling with Verification vs. Single-Shot LLM Generation
-- **Decision**: The LLM does not generate security findings directly from diff text. Instead, deterministic diagnostic tools (`runLinter`, `scanDependencies`, `runTests`) detect and verify issues first. The LLM is used solely to synthesize the structured tool outputs into a clear summary.
-- **Tradeoff**: Running tools adds small pipeline overhead (~1–2 seconds), but eliminates hallucinations. A finding is only reported if an AST rule triggered, an OSV.dev CVE record matched, or a test assertion failed.
+- **Decision**: The LLM does not generate security findings directly from raw diff text. Instead, deterministic diagnostic tools (`runLinter` for static regex/pattern analysis, `scanDependencies` for OSV.dev CVEs, `runTests` for static security invariant checks) detect and verify issues first. The LLM is used solely to synthesize the structured tool outputs into a clear summary.
+- **Tradeoff**: Running tools adds small pipeline overhead (~1–2 seconds), but eliminates hallucinations. A finding is only reported if a static pattern matched, an OSV.dev CVE record matched, or a security invariant assertion failed.
 
 ### 2. Multi-Tier Model Fallback (Groq Llama 3.3 70B ➡️ Gemini 2.5 Flash ➡️ Deterministic Engine)
 - **Decision**: Primary inference runs on Groq's `llama-3.3-70b-versatile`. If Groq returns an HTTP 429 rate limit or service error, the pipeline immediately fails over to Google's `gemini-2.0-flash`. If all external APIs are unreachable, an offline rule-based deterministic synthesizer formats the report.

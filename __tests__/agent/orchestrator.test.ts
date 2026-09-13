@@ -80,7 +80,7 @@ describe('Agent Orchestrator Loop (lib/agent/orchestrator.ts)', () => {
     );
 
     expect(progressSteps.length).toBeGreaterThanOrEqual(2);
-    expect(progressSteps[0]).toContain('AST Linter');
+    expect(progressSteps[0]).toContain('pattern-based static analysis');
   });
 
   it('returns clean summary when safe code with no vulnerabilities is evaluated', async () => {

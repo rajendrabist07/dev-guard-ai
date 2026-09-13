@@ -97,19 +97,6 @@ export async function scanDependencies(manifestContent?: string): Promise<DepsSc
           vulnerabilities.push(...cachedVulns);
         }
       } else {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 3000);
-        const res = await fetch('https://api.osv.dev/v1/query', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          signal: controller.signal,
-          body: JSON.stringify({
-            package: { name: 'axios', ecosystem: 'npm' },
-            version: '0.19.0',
-          }),
-        });
-        clearTimeout(timer);
-
         const fetchedVulns: OsvVulnerability[] = [
           {
             package: 'axios',
@@ -121,13 +108,31 @@ export async function scanDependencies(manifestContent?: string): Promise<DepsSc
           },
         ];
 
-        if (res.ok) {
-          const data = (await res.json()) as OsvQueryResponse;
-          if (data.vulns && data.vulns.length > 0) {
-            fetchedVulns[0].vulnerabilityId = data.vulns[0].id || fetchedVulns[0].vulnerabilityId;
-            fetchedVulns[0].summary = data.vulns[0].summary || fetchedVulns[0].summary;
+        try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 3000);
+          const res = await fetch('https://api.osv.dev/v1/query', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            signal: controller.signal,
+            body: JSON.stringify({
+              package: { name: 'axios', ecosystem: 'npm' },
+              version: '0.19.0',
+            }),
+          });
+          clearTimeout(timer);
+
+          if (res.ok) {
+            const data = (await res.json()) as OsvQueryResponse;
+            if (data.vulns && data.vulns.length > 0) {
+              fetchedVulns[0].vulnerabilityId = data.vulns[0].id || fetchedVulns[0].vulnerabilityId;
+              fetchedVulns[0].summary = data.vulns[0].summary || fetchedVulns[0].summary;
+            }
           }
+        } catch {
+          // Network unreachable or sandbox isolation: keep offline fallback definitions
         }
+
         await setCachedValue(cacheKey, fetchedVulns, 86400);
       }
     } catch (err) {

@@ -1,8 +1,16 @@
+/**
+ * Static Test & Assertion Validator.
+ * 
+ * DESIGN NOTE: In a webhook/serverless PR-review context where arbitrary containerized
+ * test execution (e.g. `npm test` inside an isolated microVM) is not provisioned,
+ * this tool validates critical code patterns against security and functional invariant
+ * assertions rather than fabricating full sandbox execution.
+ */
 export interface TestRunnerOutput {
   success: boolean;
-  totalTests: number;
-  passedTests: number;
-  failedTests: number;
+  totalAssertionsChecked: number;
+  passedAssertions: number;
+  failedAssertions: number;
   failures: Array<{
     testName: string;
     filePath: string;
@@ -17,6 +25,10 @@ export async function runTests(testFilePath?: string, diffSnippet?: string): Pro
   const content = diffSnippet || '';
 
   try {
+    let assertionsChecked = 0;
+
+    // Security Invariant Assertion 1: Unparameterized SQL checks
+    assertionsChecked++;
     const hasUnsafeSql =
       /\b(SELECT|INSERT\s+INTO|UPDATE|DELETE\s+FROM)\b/i.test(content) &&
       (/\bFROM\b/i.test(content) || /\bWHERE\b/i.test(content)) &&
@@ -24,37 +36,46 @@ export async function runTests(testFilePath?: string, diffSnippet?: string): Pro
 
     if (hasUnsafeSql) {
       failures.push({
-        testName: 'checkout signature & database query security assertion',
+        testName: 'Security Invariant: SQL Parameterization Assertion',
         filePath: targetFile,
-        errorMessage: 'AssertionError: Expected query execution to be parameterized but received string concatenation: "SELECT * FROM users WHERE id = ..."',
+        errorMessage: 'AssertionError: Database query must be parameterized with bind variables, not dynamic string interpolation.',
       });
     }
 
-    if (content.includes('jwt') && content.includes('expire')) {
-      // Clean test pass
+    // Security Invariant Assertion 2: Unhandled async network calls
+    if (content.includes('fetch(')) {
+      assertionsChecked++;
+      if (!content.includes('catch') && !content.includes('try')) {
+        failures.push({
+          testName: 'Reliability Invariant: Promise Error Handling Assertion',
+          filePath: targetFile,
+          errorMessage: 'AssertionError: Asynchronous network call lacks rejection handling block.',
+        });
+      }
     }
 
     const failedCount = failures.length;
-    const totalCount = failedCount > 0 ? 8 : 12;
-    const passedCount = totalCount - failedCount;
+    const passedCount = assertionsChecked - failedCount;
 
     return {
       success: failedCount === 0,
-      totalTests: totalCount,
-      passedTests: passedCount,
-      failedTests: failedCount,
+      totalAssertionsChecked: assertionsChecked,
+      passedAssertions: passedCount,
+      failedAssertions: failedCount,
       failures,
-      summary: `Ran ${totalCount} unit tests across test suite. ${passedCount} passed, ${failedCount} failed.`,
+      summary: failedCount === 0
+        ? `Static Assertion Validator: Verified ${assertionsChecked} security/reliability invariants (0 failures).`
+        : `Static Assertion Validator: ${failedCount} invariant failure(s) detected across target code paths.`,
     };
   } catch (err: unknown) {
-    const errorMsg = err instanceof Error ? err.message : 'Test runner execution timeout';
+    const errorMsg = err instanceof Error ? err.message : 'Assertion validation failure';
     return {
       success: false,
-      totalTests: 0,
-      passedTests: 0,
-      failedTests: 0,
+      totalAssertionsChecked: 0,
+      passedAssertions: 0,
+      failedAssertions: 0,
       failures: [],
-      summary: `Test suite execution skipped or timed out: ${errorMsg}`,
+      summary: `Static assertion check skipped: ${errorMsg}`,
     };
   }
 }

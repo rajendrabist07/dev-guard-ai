@@ -9,7 +9,7 @@ describe('Test Runner Engine (lib/agent/tools/test-runner.ts)', () => {
 
     const result = await runTests('tests/auth.test.ts', diff);
     expect(result.success).toBe(false);
-    expect(result.failedTests).toBeGreaterThanOrEqual(1);
+    expect(result.failedAssertions).toBeGreaterThanOrEqual(1);
     expect(result.failures[0].errorMessage).toContain('AssertionError');
     expect(result.failures[0].filePath).toBe('tests/auth.test.ts');
   });
@@ -23,7 +23,7 @@ describe('Test Runner Engine (lib/agent/tools/test-runner.ts)', () => {
 
     const result = await runTests('tests/math.test.ts', safeDiff);
     expect(result.success).toBe(true);
-    expect(result.failedTests).toBe(0);
-    expect(result.passedTests).toBe(result.totalTests);
+    expect(result.failedAssertions).toBe(0);
+    expect(result.passedAssertions).toBe(result.totalAssertionsChecked);
   });
 });

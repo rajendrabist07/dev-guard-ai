@@ -19,7 +19,7 @@ This document formalizes DevGuard AI's **defensive engineering principles** and 
 
 ## 🔍 Invariant Guarantees
 
-1. **Zero Hallucinated Security Advisories**: Findings are only created from empirical tool sources (`runLinter`, `scanDependencies`, `runTests`).
-2. **Zero Code Execution on Host**: User-submitted code is analyzed via static AST parsers and regex patterns, never passed to `eval()` or shell subprocesses.
+1. **Zero Hallucinated Security Advisories**: Findings are only created from deterministic diagnostic tool sources (`runLinter` static pattern scanner, `scanDependencies` OSV.dev CVE database, `runTests` static security assertion checks).
+2. **Zero Code Execution on Host**: User-submitted code is analyzed via static regular expressions, vulnerability databases, and code structure checks — never passed to dynamic `eval()` or unsandboxed host subprocesses.
 3. **Always Return Status**: Every review run reaches either a clean `'completed'` or explicit `'failed'` state with actionable diagnostics.
 4. **Adaptive Cost Efficiency Without Compromising Security**: Trivial fast-paths save 100% compute costs on markdown diffs while security-critical files always trigger the full multi-tool orchestrator.

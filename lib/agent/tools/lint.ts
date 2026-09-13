@@ -1,5 +1,12 @@
 import { Severity } from '../../db/types';
 
+/**
+ * Static Pattern & Heuristic Linter.
+ * 
+ * Performs deterministic regex-based static analysis across diff hunks for high-frequency
+ * security vulnerabilities (SQL Injection string concatenations, eval/XSS patterns,
+ * hardcoded credentials) and common quality anti-patterns (unhandled promises, unused vars).
+ */
 export interface LintResultItem {
   file: string;
   line: number;
@@ -134,7 +141,7 @@ export async function runLinter(files: string[], codeContent?: string): Promise<
     items,
     summary:
       items.length > 0
-        ? `ESLint & AST static analysis finished. Identified ${errors} critical error(s), ${warnings} warning(s) across target files.`
-        : 'ESLint & AST static analysis finished. All syntax and code quality rules passed with 0 violations.',
+        ? `Pattern-based static analysis finished. Identified ${errors} critical error(s), ${warnings} warning(s) across target files.`
+        : 'Pattern-based static analysis finished. All syntax and code quality checks passed with 0 violations.',
   };
 }
