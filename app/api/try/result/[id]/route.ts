@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTryRunById } from '@/lib/db/supabase';
+import { logger } from '@/lib/observability/logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,7 +21,10 @@ export async function GET(
 
     return NextResponse.json({ run });
   } catch (err: unknown) {
-    console.error('Error fetching try run by ID:', err);
+    logger.error('Error fetching try run by ID', err, {
+      module: 'try-api',
+      action: 'get-result',
+    });
     const message = err instanceof Error ? err.message : 'Failed to retrieve test run';
     return NextResponse.json({ error: message }, { status: 500 });
   }

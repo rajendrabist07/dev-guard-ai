@@ -92,4 +92,33 @@ describe('Dependency Vulnerability Scanner (lib/agent/tools/deps-scan.ts)', () =
     expect(realVulns.length).toBe(0);
     expect(result.summary).toContain('0 CVE security advisories');
   });
+
+  it('dynamically parses git diff hunks and queries OSV API', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        vulns: [
+          {
+            id: 'GHSA-custom-9999',
+            summary: 'Custom arbitrary vulnerability discovered dynamically',
+            affected: [{ ranges: [{ events: [{ fixed: '2.0.0' }] }] }],
+          },
+        ],
+      }),
+    });
+
+    const diff = `
+      --- a/package.json
+      +++ b/package.json
+      @@ -10,3 +10,4 @@
+      + "fast-xml-parser": "4.1.0"
+    `;
+
+    const result = await scanDependencies(diff);
+    expect(result.totalDependenciesScanned).toBe(1);
+    const vuln = result.vulnerabilities.find((v) => v.package === 'fast-xml-parser');
+    expect(vuln).toBeDefined();
+    expect(vuln?.vulnerabilityId).toBe('GHSA-custom-9999');
+    expect(vuln?.recommendedVersion).toBe('^2.0.0');
+  });
 });

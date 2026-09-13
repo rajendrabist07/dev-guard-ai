@@ -2,6 +2,7 @@ import { Octokit } from '@octokit/rest';
 import { createAppAuth } from '@octokit/auth-app';
 import { verify } from '@octokit/webhooks-methods';
 import { NewFinding } from '../db/types';
+import { logger } from '../observability/logger';
 
 const webhookSecret = process.env.GITHUB_WEBHOOK_SECRET || '';
 
@@ -14,13 +15,19 @@ const webhookSecret = process.env.GITHUB_WEBHOOK_SECRET || '';
  */
 export async function verifyGitHubWebhook(body: string, signature: string): Promise<boolean> {
   if (!webhookSecret) {
-    console.error('GITHUB_WEBHOOK_SECRET is not set; rejecting webhook request.');
+    logger.error('GITHUB_WEBHOOK_SECRET is not set; rejecting webhook request.', undefined, {
+      module: 'github-client',
+      action: 'verify-signature',
+    });
     return false;
   }
   try {
     return await verify(webhookSecret, body, signature);
   } catch (err) {
-    console.error('Error verifying GitHub webhook signature:', err);
+    logger.error('Error verifying GitHub webhook signature', err, {
+      module: 'github-client',
+      action: 'verify-signature',
+    });
     return false;
   }
 }
@@ -237,7 +244,13 @@ ${summaryText}${additionalNotesSection}
 
     return true;
   } catch (error) {
-    console.error('Error posting GitHub review comment:', error);
+    logger.error('Error posting GitHub review comment', error, {
+      module: 'github-client',
+      action: 'post-review-comment',
+      owner,
+      repo,
+      pullNumber,
+    });
     return false;
   }
 }
