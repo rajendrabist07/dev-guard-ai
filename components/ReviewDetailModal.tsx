@@ -125,6 +125,18 @@ export default function ReviewDetailModal({ run, findings, onClose }: ReviewDeta
             toolCallsCount={run.tool_calls_count}
           />
 
+          {run.status === 'failed' && (
+            <div className="p-4 rounded-xl bg-rose-950/40 border border-rose-900/60 flex items-start space-x-3 text-rose-200">
+              <ShieldAlert className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <div className="font-bold text-xs text-rose-300 uppercase tracking-wider">Review Run Failed</div>
+                <p className="text-xs text-rose-200 leading-relaxed">
+                  {run.error_message || 'The review process timed out or encountered an unexpected runtime failure.'}
+                </p>
+              </div>
+            </div>
+          )}
+
           {activeTab === 'findings' && (
             <div>
               {findings.length === 0 ? (

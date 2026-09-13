@@ -122,6 +122,16 @@ export default function TryPage() {
   const [activeStepIndex, setActiveStepIndex] = useState(1);
   const [result, setResult] = useState<ReviewResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [rateLimitCooldown, setRateLimitCooldown] = useState<number>(0);
+
+  // Countdown timer for rate limiting
+  useEffect(() => {
+    if (rateLimitCooldown <= 0) return;
+    const interval = setInterval(() => {
+      setRateLimitCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [rateLimitCooldown]);
 
   // Result view state
   const [activeTab, setActiveTab] = useState<'findings' | 'trace'>('findings');
@@ -168,11 +178,13 @@ export default function TryPage() {
   }, [sessionId, loadHistory]);
 
   const runReview = async (isSampleRun: boolean) => {
+    if (rateLimitCooldown > 0) return;
+
     setIsLoading(true);
     setError(null);
     setResult(null);
     setActiveStepIndex(1);
-    setLoadingStep('Initializing Agent Orchestrator & AST Linter...');
+    setLoadingStep('Initializing Agent Orchestrator & Static Analysis...');
 
     const controller = new AbortController();
     const timeoutTimer = setTimeout(() => {
@@ -211,7 +223,30 @@ export default function TryPage() {
       });
 
       if (!res.ok) {
-        throw new Error(`Agent execution request failed with HTTP ${res.status}`);
+        let errorData: { error?: string; retryAfterMs?: number; details?: Record<string, string[]> } | null = null;
+        try {
+          errorData = await res.json();
+        } catch {
+          // Response body was not JSON
+        }
+
+        if (res.status === 429) {
+          const retrySeconds = errorData?.retryAfterMs ? Math.ceil(errorData.retryAfterMs / 1000) : 60;
+          setRateLimitCooldown(retrySeconds);
+          throw new Error(
+            errorData?.error ||
+              `Rate limit reached (5 requests / 10 mins). Cooldown active: please wait ${retrySeconds}s before retrying.`
+          );
+        }
+
+        if (res.status === 400 && errorData?.details) {
+          const fieldMsgs = Object.entries(errorData.details)
+            .map(([field, msgs]) => `${field}: ${msgs.join(', ')}`)
+            .join('; ');
+          throw new Error(`Invalid Request: ${errorData.error || ''} (${fieldMsgs})`);
+        }
+
+        throw new Error(errorData?.error || `Agent execution request failed with HTTP ${res.status}`);
       }
 
       if (!res.body) {
@@ -425,6 +460,20 @@ export default function TryPage() {
           </button>
         </div>
 
+        {/* Rate Limit Active Cooldown Banner */}
+        {rateLimitCooldown > 0 && (
+          <div className="p-4 rounded-2xl bg-amber-950/40 border border-amber-500/50 flex items-center space-x-3 text-amber-200 animate-fade-in">
+            <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
+            <div className="flex-1 text-xs">
+              <span className="font-bold text-amber-300">Rate Limit Active (5 requests / 10 mins): </span>
+              <span>
+                To protect shared backend AI quotas, please wait{' '}
+                <span className="font-bold text-white font-mono">{rateLimitCooldown}s</span> before launching your next review.
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* Option 1: Sample Buggy File */}
         {activeMode === 'sample' && (
           <div className="space-y-6 animate-fade-in">
@@ -468,13 +517,18 @@ export default function TryPage() {
 
                 <button
                   onClick={() => runReview(true)}
-                  disabled={isLoading}
+                  disabled={isLoading || rateLimitCooldown > 0}
                   className="flex items-center justify-center space-x-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-black font-bold text-xs shadow-lg shadow-emerald-500/25 transition-all disabled:opacity-50"
                 >
                   {isLoading ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin text-black" />
                       <span>Reviewing Sample Code...</span>
+                    </>
+                  ) : rateLimitCooldown > 0 ? (
+                    <>
+                      <Clock className="w-3.5 h-3.5 text-black" />
+                      <span>Cooldown ({rateLimitCooldown}s)</span>
                     </>
                   ) : (
                     <>
@@ -530,8 +584,8 @@ export default function TryPage() {
                   <label className="text-xs font-semibold text-gray-300">
                     Paste Code Snippet or Unified Diff:
                   </label>
-                  <span className="text-[11px] text-gray-500 font-mono">
-                    Supports JS/TS, package.json dependencies, and raw diffs
+                  <span className={`text-[11px] font-mono ${customDiff.length > 90000 ? 'text-rose-400 font-bold' : 'text-gray-400'}`}>
+                    {(customDiff.length / 1024).toFixed(1)} KB / 100 KB max
                   </span>
                 </div>
                 <textarea
@@ -553,13 +607,18 @@ export default function TryPage() {
               <div className="flex justify-end pt-2">
                 <button
                   onClick={() => runReview(false)}
-                  disabled={isLoading || !customDiff.trim()}
+                  disabled={isLoading || rateLimitCooldown > 0 || !customDiff.trim()}
                   className="flex items-center space-x-2 px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-black font-bold text-xs shadow-lg shadow-emerald-500/25 transition-all disabled:opacity-50"
                 >
                   {isLoading ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin text-black" />
                       <span>Agent Running Review...</span>
+                    </>
+                  ) : rateLimitCooldown > 0 ? (
+                    <>
+                      <Clock className="w-4 h-4 text-black" />
+                      <span>Cooldown ({rateLimitCooldown}s)</span>
                     </>
                   ) : (
                     <>
@@ -721,6 +780,23 @@ export default function TryPage() {
                 agentTrace={result.trace}
                 toolCallsCount={result.toolCallsCount}
               />
+
+              {result.summary &&
+                (result.summary.includes('Flagged for Human Review') ||
+                  result.summary.includes('Agent Uncertain') ||
+                  result.summary.includes('Empirical Diagnostics')) && (
+                  <div className="p-4 rounded-xl bg-amber-950/40 border border-amber-500/50 flex items-start space-x-3 text-amber-200">
+                    <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <div className="font-bold text-xs text-amber-300 uppercase tracking-wider">
+                        🛡️ Empirical Consistency Guard Active — Flagged for Human Review
+                      </div>
+                      <p className="text-xs text-amber-200 leading-relaxed">
+                        Potential prompt injection or approval manipulation detected in untrusted inputs. The agent overruled false approval claims and surfaced empirical tool diagnostics directly for human evaluation.
+                      </p>
+                    </div>
+                  </div>
+                )}
             </div>
 
             {/* Tab Selector: Findings vs Agent Trace */}
