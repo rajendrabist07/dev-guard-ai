@@ -88,7 +88,48 @@ export async function fetchPullRequestDiff(
 }
 
 /**
+ * Parses git patch hunks (@@ -l,s +l,s @@) to map exact line numbers present in the PR diff per file.
+ * Lines inside @@ +start,count @@ hunks are valid targets for GitHub inline comments.
+ */
+export function parseDiffModifiedLines(diffText: string): Map<string, Set<number>> {
+  const fileLinesMap = new Map<string, Set<number>>();
+  if (!diffText) return fileLinesMap;
+
+  const fileDiffs = diffText.split(/^--- a\//m);
+
+  for (const fileDiff of fileDiffs) {
+    if (!fileDiff.trim()) continue;
+
+    // Extract filename from +++ b/filename
+    const headerMatch = fileDiff.match(/^\+\+\+ b\/(.+)$/m);
+    if (!headerMatch) continue;
+    const fileName = headerMatch[1].trim();
+
+    const validLines = new Set<number>();
+    // Match hunk headers: @@ -oldStart,oldCount +newStart,newCount @@
+    const hunkRegex = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,(\d+))? @@/gm;
+    let match: RegExpExecArray | null;
+
+    while ((match = hunkRegex.exec(fileDiff)) !== null) {
+      const startLine = parseInt(match[2], 10);
+      const lineCount = match[3] !== undefined ? parseInt(match[3], 10) : 1;
+
+      for (let i = 0; i < lineCount; i++) {
+        validLines.add(startLine + i);
+      }
+    }
+
+    fileLinesMap.set(fileName, validLines);
+  }
+
+  return fileLinesMap;
+}
+
+/**
  * Formats and posts an empirical review comment with one-click fix patches to GitHub.
+ * Protects against Octokit HTTP 422 errors by validating that inline comments only target
+ * lines confirmed to exist within the PR diff's modified hunks.
+ * Findings on lines outside the diff are appended as top-level review feedback.
  * 
  * @param octokit - Authenticated Octokit client
  * @param owner - Repository owner login
@@ -97,6 +138,7 @@ export async function fetchPullRequestDiff(
  * @param commitSha - Latest commit SHA of the pull request
  * @param findings - Array of identified security and quality findings
  * @param summaryText - Synthesized summary of review findings
+ * @param rawDiff - Raw unified diff text (optional, used for hunk validation)
  */
 export async function postGitHubReviewComment(
   octokit: Octokit,
@@ -105,12 +147,36 @@ export async function postGitHubReviewComment(
   pullNumber: number,
   commitSha: string,
   findings: NewFinding[],
-  summaryText: string
+  summaryText: string,
+  rawDiff?: string
 ): Promise<boolean> {
   try {
-    // High and medium confidence findings become direct inline comments
-    const inlineFindings = findings.filter((f) => f.confidence !== 'low');
-    const lowConfidenceFindings = findings.filter((f) => f.confidence === 'low');
+    const modifiedLinesMap = rawDiff ? parseDiffModifiedLines(rawDiff) : null;
+
+    // Separate inline-eligible findings (within modified hunks) vs out-of-diff / low confidence
+    const inlineFindings: NewFinding[] = [];
+    const outOfDiffFindings: NewFinding[] = [];
+    const lowConfidenceFindings: NewFinding[] = [];
+
+    for (const finding of findings) {
+      if (finding.confidence === 'low') {
+        lowConfidenceFindings.push(finding);
+        continue;
+      }
+
+      if (modifiedLinesMap) {
+        const fileHunkLines = modifiedLinesMap.get(finding.file_path);
+        const isLineInDiff = fileHunkLines ? fileHunkLines.has(finding.line) : true;
+
+        if (isLineInDiff) {
+          inlineFindings.push(finding);
+        } else {
+          outOfDiffFindings.push(finding);
+        }
+      } else {
+        inlineFindings.push(finding);
+      }
+    }
 
     const comments = inlineFindings.map((finding) => {
       const confidenceBadge = finding.confidence === 'high' ? '🔥 HIGH CONFIDENCE' : '⚖️ MEDIUM CONFIDENCE';
@@ -130,9 +196,19 @@ ${finding.suggested_fix ? `\`\`\`suggestion\n${finding.suggested_fix}\n\`\`\`` :
       };
     });
 
-    let advisorySection = '';
+    let additionalNotesSection = '';
+
+    if (outOfDiffFindings.length > 0) {
+      additionalNotesSection += `\n\n### 📌 Findings in Surrounding Code (Outside Modified Diff)\n*The following findings were detected in modified files but fall outside the changed diff lines:*\n\n` +
+        outOfDiffFindings
+          .map(
+            (f) => `- **${f.file_path}:${f.line}** [${f.severity.toUpperCase()}]: ${f.message}`
+          )
+          .join('\n');
+    }
+
     if (lowConfidenceFindings.length > 0) {
-      advisorySection = `\n\n### 🔍 Worth a Second Look (Heuristic / Low-Confidence Flags)\n*The following items were flagged by a single static heuristic without multi-tool corroboration. Human reviewer judgment recommended:*\n\n` +
+      additionalNotesSection += `\n\n### 🔍 Worth a Second Look (Heuristic / Low-Confidence Flags)\n*The following items were flagged by a single static heuristic without multi-tool corroboration. Human reviewer judgment recommended:*\n\n` +
         lowConfidenceFindings
           .map(
             (f) => `- **${f.file_path}:${f.line}** (${f.tool_source}): ${f.message}`
@@ -152,7 +228,7 @@ ${finding.suggested_fix ? `\`\`\`suggestion\n${finding.suggested_fix}\n\`\`\`` :
       event: hasHighConfidenceCritical ? 'REQUEST_CHANGES' : 'COMMENT',
       body: `## 🛡️ DevGuard AI Security & Quality Review
 
-${summaryText}${advisorySection}
+${summaryText}${additionalNotesSection}
 
 ---
 *Autonomous Review by DevGuard AI with Multi-Tool Corroboration & Confidence Calibration.*`,

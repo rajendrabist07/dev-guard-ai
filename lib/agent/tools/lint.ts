@@ -17,6 +17,20 @@ export interface LintToolOutput {
   summary: string;
 }
 
+function findMatchingLineNumber(content: string, matcher: RegExp | string, fallbackLine = 1): number {
+  if (!content) return fallbackLine;
+  const lines = content.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const lineStr = lines[i];
+    if (typeof matcher === 'string') {
+      if (lineStr.includes(matcher)) return i + 1;
+    } else {
+      if (matcher.test(lineStr)) return i + 1;
+    }
+  }
+  return fallbackLine;
+}
+
 export async function runLinter(files: string[], codeContent?: string): Promise<LintToolOutput> {
   const items: LintResultItem[] = [];
   const contentToScan = codeContent || '';
@@ -30,9 +44,10 @@ export async function runLinter(files: string[], codeContent?: string): Promise<
     );
 
   if (hasSqlKeywords && hasSqlConcatOrInterpolation) {
+    const matchedLine = findMatchingLineNumber(contentToScan, /\b(SELECT|INSERT|UPDATE|DELETE)\b/i, 1);
     items.push({
       file: targetFile,
-      line: 34,
+      line: matchedLine,
       message: 'Unsanitized user input string concatenation in database query (SQL Injection risk).',
       severity: 'critical',
       ruleId: 'security/no-unsafe-sql-query',
@@ -42,9 +57,10 @@ export async function runLinter(files: string[], codeContent?: string): Promise<
 
   // 2. Unhandled async/promise check
   if (contentToScan.includes('fetch(') && !contentToScan.includes('catch') && !contentToScan.includes('try')) {
+    const matchedLine = findMatchingLineNumber(contentToScan, 'fetch(', 1);
     items.push({
       file: targetFile,
-      line: 82,
+      line: matchedLine,
       message: 'Unhandled Promise Rejection: fetch() call lacks try/catch block or .catch() handler.',
       severity: 'warning',
       ruleId: 'promise/catch-or-return',
@@ -54,9 +70,10 @@ export async function runLinter(files: string[], codeContent?: string): Promise<
 
   // 3. Dangerous innerHTML or eval
   if (contentToScan.includes('dangerouslySetInnerHTML') || contentToScan.includes('eval(')) {
+    const matchedLine = findMatchingLineNumber(contentToScan, /(?:dangerouslySetInnerHTML|eval\()/, 1);
     items.push({
       file: targetFile,
-      line: 45,
+      line: matchedLine,
       message: 'Execution of eval() or direct raw HTML rendering detected (XSS Vulnerability).',
       severity: 'critical',
       ruleId: 'security/no-eval-xss',
@@ -69,9 +86,14 @@ export async function runLinter(files: string[], codeContent?: string): Promise<
   const hasGenericSecretAssignment = /(?:api[_-]?key|secret|password|auth[_-]?token)\s*[:=]\s*['"`]([a-zA-Z0-9_\-!@#$%^&*()]{16,})['"`]/i.test(contentToScan);
 
   if (hasKnownSecretPrefix || hasGenericSecretAssignment) {
+    const matchedLine = findMatchingLineNumber(
+      contentToScan,
+      /(?:sk_live_|ghp_|AIza|api[_-]?key|secret|password|auth[_-]?token)/i,
+      1
+    );
     items.push({
       file: targetFile,
-      line: 14,
+      line: matchedLine,
       message: 'Hardcoded secret or sensitive authentication credential detected in source code.',
       severity: 'critical',
       ruleId: 'security/no-hardcoded-credentials',
@@ -88,9 +110,10 @@ export async function runLinter(files: string[], codeContent?: string): Promise<
       const regex = new RegExp(`\\b${varName}\\b`, 'g');
       const count = (contentToScan.match(regex) || []).length;
       if (count === 1) {
+        const matchedLine = findMatchingLineNumber(contentToScan, new RegExp(`\\b${varName}\\b`), 1);
         items.push({
           file: targetFile,
-          line: 21,
+          line: matchedLine,
           message: `'${varName}' is assigned a value but never used in the execution path.`,
           severity: 'warning',
           ruleId: 'eslint/no-unused-vars',
