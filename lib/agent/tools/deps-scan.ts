@@ -216,7 +216,7 @@ async function queryOsvForDependency(pkgName: string, version: string): Promise<
         const mappedResults: VulnerabilityResult[] = data.vulns.map((v) => {
           const rawSummary = v.summary || v.details || `Security vulnerability reported for ${pkgName}@${version}`;
           const isCritical =
-            /critical|remote code execution|rce|arbitrary|prototype pollution|ssrf/i.test(rawSummary) ||
+            /\bcritical\b|remote code execution|\brce\b|arbitrary code execution|\bssrf\b/i.test(rawSummary) ||
             v.database_specific?.severity?.toLowerCase() === 'critical';
 
           return {

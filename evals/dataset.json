@@ -156,7 +156,7 @@
     "id": "case-18-clean-package-json",
     "description": "Package manifest updated with modern safe dependencies",
     "files": ["package.json"],
-    "diff": "--- a/package.json\n+++ b/package.json\n@@ -10,3 +10,5 @@\n   \"dependencies\": {\n+    \"next\": \"^15.1.0\",\n+    \"react\": \"^19.0.0\"\n   }",
+    "diff": "--- a/package.json\n+++ b/package.json\n@@ -10,3 +10,5 @@\n   \"dependencies\": {\n+    \"clsx\": \"2.1.1\",\n+    \"lucide-react\": \"^0.475.0\"\n   }",
     "expected_tools_called": ["scanDependencies"],
     "expected_severity": "none",
     "expected_flags": []
