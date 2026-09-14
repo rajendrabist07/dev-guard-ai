@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-09-14T10:30:13.427Z",
+  "timestamp": "2026-09-14T10:44:10.229Z",
   "total_cases": 20,
   "tool_selection_precision": 100,
   "tool_selection_recall": 100,
@@ -7,7 +7,7 @@
   "severity_accuracy": 100,
   "wasted_tool_call_rate": 0,
   "docs_efficiency_pass": true,
-  "total_duration_ms": 66,
+  "total_duration_ms": 58,
   "case_results": [
     {
       "id": "case-01-vulnerable-dep-axios",
@@ -25,7 +25,7 @@
       "actual_severity": "critical",
       "severity_matched": true,
       "actual_findings_count": 1,
-      "duration_ms": 48
+      "duration_ms": 47
     },
     {
       "id": "case-02-vulnerable-dep-lodash",
@@ -61,7 +61,7 @@
       "actual_severity": "warning",
       "severity_matched": true,
       "actual_findings_count": 1,
-      "duration_ms": 4
+      "duration_ms": 2
     },
     {
       "id": "case-04-docs-readme-only",
@@ -89,7 +89,7 @@
       "actual_severity": "none",
       "severity_matched": true,
       "actual_findings_count": 0,
-      "duration_ms": 1
+      "duration_ms": 0
     },
     {
       "id": "case-06-docs-changelog-only",
@@ -141,7 +141,7 @@
       "actual_severity": "critical",
       "severity_matched": true,
       "actual_findings_count": 1,
-      "duration_ms": 1
+      "duration_ms": 0
     },
     {
       "id": "case-09-xss-dangerous-innerhtml",
@@ -213,7 +213,7 @@
       "actual_severity": "critical",
       "severity_matched": true,
       "actual_findings_count": 2,
-      "duration_ms": 1
+      "duration_ms": 0
     },
     {
       "id": "case-13-unhandled-promise-fetch",
@@ -285,7 +285,7 @@
       "actual_severity": "none",
       "severity_matched": true,
       "actual_findings_count": 0,
-      "duration_ms": 0
+      "duration_ms": 1
     },
     {
       "id": "case-17-multi-file-full-stack",
@@ -307,7 +307,7 @@
       "actual_severity": "critical",
       "severity_matched": true,
       "actual_findings_count": 3,
-      "duration_ms": 1
+      "duration_ms": 0
     },
     {
       "id": "case-18-clean-package-json",
@@ -325,7 +325,7 @@
       "actual_severity": "none",
       "severity_matched": true,
       "actual_findings_count": 0,
-      "duration_ms": 3
+      "duration_ms": 2
     },
     {
       "id": "case-19-checkout-endpoint-test-trigger",
@@ -345,7 +345,7 @@
       "actual_severity": "critical",
       "severity_matched": true,
       "actual_findings_count": 2,
-      "duration_ms": 1
+      "duration_ms": 0
     },
     {
       "id": "case-20-clean-tailwind-config",
