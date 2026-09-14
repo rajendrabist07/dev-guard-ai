@@ -23,7 +23,7 @@
     "files": ["package.json"],
     "diff": "--- a/package.json\n+++ b/package.json\n@@ -5,3 +5,4 @@\n+    \"minimist\": \"0.0.8\"\n   }",
     "expected_tools_called": ["scanDependencies"],
-    "expected_severity": "warning",
+    "expected_severity": "critical",
     "expected_flags": ["CVE-2021-44906"]
   },
   {

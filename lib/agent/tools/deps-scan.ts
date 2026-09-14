@@ -79,7 +79,7 @@ const OFFLINE_KNOWN_VULNERABILITIES: Record<string, VulnerabilityResult[]> = {
       version: '0.0.8',
       vulnerabilityId: 'CVE-2021-44906',
       summary: 'Prototype Pollution in minimist parse args.',
-      severity: 'warning',
+      severity: 'critical',
       recommendedVersion: '^1.2.8',
     },
   ],

@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-09-14T10:45:28.080Z",
+  "timestamp": "2026-09-14T12:43:40.849Z",
   "total_real_world_diffs": 20,
   "repositories_evaluated": [
     "shadcn-ui/taxonomy",
@@ -9,15 +9,15 @@
     "t3-oss/create-t3-app"
   ],
   "metrics": {
-    "true_positives": 7,
+    "true_positives": 8,
     "false_positives": 2,
     "true_negatives": 10,
-    "false_negatives": 1,
-    "precision": 77.8,
-    "recall": 87.5,
+    "false_negatives": 0,
+    "precision": 80,
+    "recall": 100,
     "false_positive_rate": 16.7,
-    "false_negative_rate": 12.5,
-    "accuracy": 85
+    "false_negative_rate": 0,
+    "accuracy": 90
   },
   "results": [
     {
@@ -46,7 +46,7 @@
         "runLinter",
         "runTests"
       ],
-      "duration_ms": 1
+      "duration_ms": 2
     },
     {
       "id": "taxonomy-pr-142-markdown-render",
@@ -59,7 +59,7 @@
       "tools_called": [
         "runLinter"
       ],
-      "duration_ms": 1
+      "duration_ms": 0
     },
     {
       "id": "taxonomy-pr-155-tailwind-typography",
@@ -72,7 +72,7 @@
       "tools_called": [
         "scanDependencies"
       ],
-      "duration_ms": 40
+      "duration_ms": 510
     },
     {
       "id": "calcom-pr-4012-stripe-webhook",
@@ -85,7 +85,7 @@
       "tools_called": [
         "runLinter"
       ],
-      "duration_ms": 1
+      "duration_ms": 0
     },
     {
       "id": "calcom-pr-4180-raw-user-lookup",
@@ -117,14 +117,14 @@
       "id": "calcom-pr-4388-dependency-bump-axios",
       "repository": "calcom/cal.com",
       "pr_number": 4388,
-      "findings_count": 0,
-      "agent_severity": "none",
-      "classification": "false_negative",
+      "findings_count": 30,
+      "agent_severity": "critical",
+      "classification": "true_positive",
       "human_notes": "Reintroduces known SSRF CVE in axios 0.19.0",
       "tools_called": [
         "scanDependencies"
       ],
-      "duration_ms": 2
+      "duration_ms": 1193
     },
     {
       "id": "dub-pr-321-qr-code-styling",
@@ -137,7 +137,7 @@
       "tools_called": [
         "runLinter"
       ],
-      "duration_ms": 1
+      "duration_ms": 0
     },
     {
       "id": "dub-pr-355-analytics-ingest",
@@ -151,7 +151,7 @@
         "runLinter",
         "runTests"
       ],
-      "duration_ms": 0
+      "duration_ms": 1
     },
     {
       "id": "dub-pr-389-exposed-client-token",
@@ -164,7 +164,7 @@
       "tools_called": [
         "runLinter"
       ],
-      "duration_ms": 1
+      "duration_ms": 0
     },
     {
       "id": "dub-pr-412-readme-docs-update",
@@ -207,14 +207,14 @@
       "id": "novu-pr-2244-lodash-vulnerable-import",
       "repository": "novuhq/novu",
       "pr_number": 2244,
-      "findings_count": 1,
+      "findings_count": 6,
       "agent_severity": "warning",
       "classification": "true_positive",
       "human_notes": "Known prototype pollution vulnerability in lodash 4.17.15 (CVE-2020-8203)",
       "tools_called": [
         "scanDependencies"
       ],
-      "duration_ms": 7
+      "duration_ms": 443
     },
     {
       "id": "novu-pr-2310-eslint-config-cleanup",
