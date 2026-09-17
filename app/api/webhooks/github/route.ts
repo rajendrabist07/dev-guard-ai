@@ -260,6 +260,6 @@ export async function POST(req: NextRequest) {
       action: 'process-request',
     });
     const message = err instanceof Error ? err.message : 'Internal Server Error';
-    return NextResponse.json({ error: message }, { status: 200 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
