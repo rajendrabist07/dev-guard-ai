@@ -26,7 +26,7 @@
     "@sentry/nextjs": "^10.70.0",
     "@supabase/supabase-js": "^2.48.1",
     "@upstash/ratelimit": "^2.0.8",
-    "@upstash/redis": "^1.38.2",
+    "@upstash/redis": "^1.38.4",
     "clsx": "^2.1.1",
     "groq-sdk": "^0.15.0",
     "jspdf": "^4.2.1",
