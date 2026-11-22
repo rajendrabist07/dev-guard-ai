@@ -63,7 +63,7 @@ export default function Image() {
           </div>
 
           <div style={{ fontSize: 26, lineHeight: 1.35, color: '#cbd5e1' }}>
-            Runs linters, dependency scans, and tests before producing structured security findings.
+            Runs static security rules, dependency scans, and diff invariant checks before producing structured findings.
           </div>
         </div>
 

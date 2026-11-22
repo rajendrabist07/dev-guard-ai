@@ -4,7 +4,7 @@ import './globals.css';
 const siteUrl = 'https://dev-guard-ai.vercel.app';
 const title = 'DevGuard AI - Autonomous PR Review & Security Agent';
 const description =
-  'An agentic AI review bot that calls linters, vulnerability scanners, and test runners to deliver evidence-backed pull request reviews.';
+  'An autonomous security review agent that combines static rules, dependency vulnerability scanning, and diff invariant verification to deliver evidence-backed pull request reviews.';
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),

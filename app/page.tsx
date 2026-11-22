@@ -42,7 +42,7 @@ export default function Home() {
 
         <div className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-semibold mb-8 animate-fade-in shadow-sm shadow-emerald-950">
           <Zap className="w-3.5 h-3.5 text-emerald-400" />
-          <span>Empirical Tool-Calling Agent — Not Just Plain Diff Comments</span>
+          <span>Diagnostic Security Agent — Evidence-Backed Pull Request Reviews</span>
         </div>
 
         <h1 className="text-4xl sm:text-6xl font-extrabold text-white tracking-tight leading-[1.15] max-w-4xl mx-auto">
@@ -50,7 +50,7 @@ export default function Home() {
         </h1>
 
         <p className="mt-6 text-lg sm:text-xl text-gray-400 max-w-2xl mx-auto font-normal leading-relaxed">
-          DevGuard AI acts as an active security engineer on every pull request. It executes AST static linters, checks OSV vulnerability databases, and runs tests before rendering structured inline feedback.
+          DevGuard AI reviews pull requests for security and reliability issues. It executes static security rules, checks OSV vulnerability databases for dependencies, and validates code diff invariants before synthesizing structured inline feedback.
         </p>
 
         <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -76,9 +76,9 @@ export default function Home() {
             <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
               <Cpu className="w-5 h-5 text-emerald-400" />
             </div>
-            <h3 className="text-base font-bold text-white mb-2">Agentic Multi-Step Loop</h3>
+            <h3 className="text-base font-bold text-white mb-2">Deterministic Diagnostic Pipeline</h3>
             <p className="text-xs text-gray-400 leading-relaxed">
-              The LLM orchestrator chooses tools, inspects outputs, and refines findings up to 5 iterations before producing inline PR annotations.
+              Executes static pattern rules, dependency vulnerability lookups, and diff invariants before AI synthesis produces inline PR annotations.
             </p>
           </div>
 
@@ -86,9 +86,9 @@ export default function Home() {
             <div className="w-10 h-10 rounded-xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
               <ShieldCheck className="w-5 h-5 text-teal-400" />
             </div>
-            <h3 className="text-base font-bold text-white mb-2">Real Tool Integration</h3>
+            <h3 className="text-base font-bold text-white mb-2">Diagnostic Tool Evidence</h3>
             <p className="text-xs text-gray-400 leading-relaxed">
-              Wraps AST linter checks, OSV.dev vulnerability databases for <code className="text-emerald-300">package.json</code>, and unit test suites for zero hallucinations.
+              Runs static security rules, queries OSV.dev vulnerability databases for <code className="text-emerald-300">package.json</code> dependencies, and checks diff-level invariants.
             </p>
           </div>
 
@@ -116,12 +116,12 @@ export default function Home() {
               <p className="text-gray-400">Triggers on PR <code className="text-gray-300">opened</code> / <code className="text-gray-300">synchronize</code>, verifies HMAC-SHA256 signature.</p>
             </div>
             <div className="p-4 rounded-xl bg-gray-950 border border-gray-800 space-y-2">
-              <div className="text-emerald-400 font-mono font-bold">2. Agent Orchestrator</div>
-              <p className="text-gray-400">Groq Llama 3.3 70B with Gemini 2.5 Flash fallback evaluates PR diff and chooses execution tools.</p>
+              <div className="text-emerald-400 font-mono font-bold">2. Diagnostic Engine</div>
+              <p className="text-gray-400">Executes static pattern rules, OSV vulnerability queries, and diff invariant checks to gather concrete evidence.</p>
             </div>
             <div className="p-4 rounded-xl bg-gray-950 border border-gray-800 space-y-2">
-              <div className="text-emerald-400 font-mono font-bold">3. Tool Verification</div>
-              <p className="text-gray-400">Runs AST linter, OSV vulnerability scan, and test suite runner to gather concrete evidence.</p>
+              <div className="text-emerald-400 font-mono font-bold">3. Model Synthesis</div>
+              <p className="text-gray-400">Groq Llama 3.3 70B with Gemini 2.0 Flash fallback synthesizes verified tool findings into actionable guidance.</p>
             </div>
             <div className="p-4 rounded-xl bg-gray-950 border border-gray-800 space-y-2">
               <div className="text-emerald-400 font-mono font-bold">4. GitHub Review Post</div>
