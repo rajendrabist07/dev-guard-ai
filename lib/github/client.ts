@@ -1,28 +1,46 @@
+import crypto from 'crypto';
 import { Octokit } from '@octokit/rest';
 import { createAppAuth } from '@octokit/auth-app';
-import { verify } from '@octokit/webhooks-methods';
 import { NewFinding } from '../db/types';
 import { logger } from '../observability/logger';
 
 const webhookSecret = process.env.GITHUB_WEBHOOK_SECRET || '';
 
+// Token cache to avoid re-authenticating with GitHub on every tool execution
+interface CachedInstallationToken {
+  token: string;
+  expiresAt: number;
+}
+const installationTokenCache = new Map<number, CachedInstallationToken>();
+
 /**
- * Validates the HMAC-SHA256 signature transmitted in `x-hub-signature-256` header.
+ * Validates the HMAC-SHA256 signature transmitted in `x-hub-signature-256` header
+ * using constant-time comparison (crypto.timingSafeEqual).
  * 
  * @param body - Raw request payload string (unparsed)
  * @param signature - Signature string sent in header (e.g. `sha256=...`)
  * @returns {Promise<boolean>} True if signature matches secret and payload, false otherwise
  */
 export async function verifyGitHubWebhook(body: string, signature: string): Promise<boolean> {
-  if (!webhookSecret) {
-    logger.error('GITHUB_WEBHOOK_SECRET is not set; rejecting webhook request.', undefined, {
+  if (!webhookSecret || !signature) {
+    logger.error('GITHUB_WEBHOOK_SECRET is not set or signature is missing; rejecting webhook request.', undefined, {
       module: 'github-client',
       action: 'verify-signature',
     });
     return false;
   }
   try {
-    return await verify(webhookSecret, body, signature);
+    const hmac = crypto.createHmac('sha256', webhookSecret).update(body).digest('hex');
+    const expected = `sha256=${hmac}`;
+
+    const expectedBuf = Buffer.from(expected, 'utf8');
+    const receivedBuf = Buffer.from(signature, 'utf8');
+
+    if (expectedBuf.length !== receivedBuf.length) {
+      return false;
+    }
+
+    return crypto.timingSafeEqual(expectedBuf, receivedBuf);
   } catch (err) {
     logger.error('Error verifying GitHub webhook signature', err, {
       module: 'github-client',
@@ -38,6 +56,7 @@ function getGitHubPrivateKey(): string {
 
 /**
  * Instantiates an authenticated Octokit client for the target GitHub App installation.
+ * Caches tokens until 2 minutes prior to expiration.
  * 
  * @param installationId - Optional numeric GitHub installation ID
  * @returns {Promise<Octokit>} Authenticated Octokit REST client
@@ -47,12 +66,29 @@ export async function getOctokitClient(installationId?: number): Promise<Octokit
   const privateKey = getGitHubPrivateKey();
 
   if (installationId && appId && privateKey) {
+    const now = Date.now();
+    const cached = installationTokenCache.get(installationId);
+    if (cached && now < cached.expiresAt - 120_000) {
+      return new Octokit({ auth: cached.token });
+    }
+
     const auth = createAppAuth({
       appId,
       privateKey,
       installationId,
     });
     const installationAuthentication = await auth({ type: 'installation' });
+    
+    // Default expiration is 1 hour (3600s)
+    const expiresAt = installationAuthentication.expiresAt
+      ? new Date(installationAuthentication.expiresAt).getTime()
+      : now + 3_600_000;
+
+    installationTokenCache.set(installationId, {
+      token: installationAuthentication.token,
+      expiresAt,
+    });
+
     return new Octokit({ auth: installationAuthentication.token });
   }
 

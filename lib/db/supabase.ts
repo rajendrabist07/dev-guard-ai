@@ -485,6 +485,87 @@ export async function findExistingReviewRun(repoId: string, prNumber: number, co
   }
 }
 
+const inMemoryDeliveries = new Set<string>();
+
+export async function recordWebhookDelivery(deliveryId: string, eventType: string): Promise<boolean> {
+  const db = getSupabaseAdmin();
+  if (db) {
+    try {
+      const { error } = await db.from('webhook_deliveries').insert({
+        delivery_id: deliveryId,
+        event_type: eventType,
+      });
+      if (error) {
+        if (error.code === '23505' || error.message.includes('unique') || error.message.includes('duplicate')) {
+          return false;
+        }
+      } else {
+        return true;
+      }
+    } catch {
+      // Fall through to memory fallback
+    }
+  }
+  if (inMemoryDeliveries.has(deliveryId)) {
+    return false;
+  }
+  inMemoryDeliveries.add(deliveryId);
+  if (inMemoryDeliveries.size > 1000) {
+    const [first] = inMemoryDeliveries;
+    inMemoryDeliveries.delete(first);
+  }
+  return true;
+}
+
+export async function createReviewRunOnConflictDoNothing(
+  data: NewReviewRun
+): Promise<{ created: boolean; reviewRun: DisplayReviewRun }> {
+  const db = getSupabaseAdmin();
+  const insertData = {
+    repo_id: data.repo_id,
+    pr_number: data.pr_number,
+    pr_title: data.pr_title ?? null,
+    pr_author: data.pr_author ?? null,
+    commit_sha: data.commit_sha,
+    status: data.status,
+    tool_calls_count: data.tool_calls_count ?? 0,
+    agent_trace: data.agent_trace ?? [],
+    error_message: data.error_message ?? null,
+    is_simulation: data.is_simulation ?? false,
+    started_at: data.started_at ?? new Date().toISOString(),
+    completed_at: data.completed_at ?? null,
+  };
+
+  if (db) {
+    try {
+      const { data: created, error } = await db
+        .from('review_runs')
+        .insert(insertData)
+        .select()
+        .maybeSingle();
+
+      if (!error && created) {
+        return { created: true, reviewRun: created as DisplayReviewRun };
+      }
+
+      // If duplicate conflict, retrieve the existing run
+      const existing = await findExistingReviewRun(data.repo_id, data.pr_number, data.commit_sha);
+      if (existing) {
+        return { created: false, reviewRun: existing };
+      }
+    } catch {
+      // Fall through to in-memory fallback
+    }
+  }
+
+  const existing = await findExistingReviewRun(data.repo_id, data.pr_number, data.commit_sha);
+  if (existing) {
+    return { created: false, reviewRun: existing };
+  }
+  const created = await createReviewRun(data);
+  return { created: true, reviewRun: created };
+}
+
 export async function createReviewRun(data: NewReviewRun): Promise<DisplayReviewRun> {
   const db = requireSupabaseAdmin();
   const insertData = {

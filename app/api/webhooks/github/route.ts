@@ -6,9 +6,10 @@ import {
   verifyGitHubWebhook,
 } from '@/lib/github/client';
 import {
-  createReviewRun,
+  createReviewRunOnConflictDoNothing,
   ensureRepoForInstallation,
   findExistingReviewRun,
+  recordWebhookDelivery,
   saveFindings,
   updateReviewRun,
 } from '@/lib/db/supabase';
@@ -17,6 +18,8 @@ import { logger } from '@/lib/observability/logger';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
+const MAX_WEBHOOK_PAYLOAD_BYTES = 5 * 1024 * 1024; // 5MB payload limit
 
 /**
  * Executes the full agentic review pipeline in a non-blocking background context.
@@ -123,10 +126,41 @@ export async function POST(req: NextRequest) {
 
   try {
     const rawBody = await req.text();
-    const signature = req.headers.get('x-hub-signature-256') || '';
-    const eventType = req.headers.get('x-github-event') || '';
 
-    // 1. Verify Webhook Signature
+    // 1. Enforce Maximum Payload Size (5MB)
+    if (Buffer.byteLength(rawBody, 'utf8') > MAX_WEBHOOK_PAYLOAD_BYTES) {
+      logger.warn('Rejected GitHub webhook exceeding max payload size limit (5MB)', {
+        module: 'webhook-handler',
+        action: 'check-payload-size',
+        size: Buffer.byteLength(rawBody, 'utf8'),
+      });
+      return NextResponse.json({ error: 'Payload too large (max 5MB)' }, { status: 413 });
+    }
+
+    const signature = req.headers.get('x-hub-signature-256');
+    const eventType = req.headers.get('x-github-event') || '';
+    const deliveryId = req.headers.get('x-github-delivery');
+
+    // 2. Reject Missing Required Headers
+    if (!signature) {
+      logger.warn('Rejected GitHub webhook missing x-hub-signature-256 header', {
+        module: 'webhook-handler',
+        action: 'verify-signature',
+        eventType,
+      });
+      return NextResponse.json({ error: 'Missing x-hub-signature-256 header' }, { status: 401 });
+    }
+
+    if (!deliveryId) {
+      logger.warn('Rejected GitHub webhook missing x-github-delivery header', {
+        module: 'webhook-handler',
+        action: 'verify-delivery',
+        eventType,
+      });
+      return NextResponse.json({ error: 'Missing x-github-delivery header' }, { status: 400 });
+    }
+
+    // 3. Verify Webhook Signature via Timing-Safe HMAC-SHA256
     const isValid = await verifyGitHubWebhook(rawBody, signature);
     if (!isValid) {
       logger.warn('Rejected GitHub webhook due to invalid HMAC-SHA256 signature', {
@@ -135,6 +169,30 @@ export async function POST(req: NextRequest) {
         eventType,
       });
       return NextResponse.json({ error: 'Invalid webhook signature' }, { status: 401 });
+    }
+
+    // 4. Delivery ID Replay Prevention
+    const isNewDelivery = await recordWebhookDelivery(deliveryId, eventType);
+    if (!isNewDelivery) {
+      logger.info('Duplicate webhook delivery ignored (replay prevention)', {
+        module: 'webhook-handler',
+        action: 'replay-dedupe',
+        deliveryId,
+      });
+      return NextResponse.json(
+        { message: 'Duplicate webhook delivery ignored (replay prevention)' },
+        { status: 200 }
+      );
+    }
+
+    // 5. Filter and Handle Unsupported Events (Return 202 with Log Line)
+    if (eventType !== 'pull_request') {
+      logger.info('Ignored unsupported GitHub webhook event type', {
+        module: 'webhook-handler',
+        action: 'unsupported-event',
+        eventType,
+      });
+      return NextResponse.json({ message: `Event ${eventType} ignored` }, { status: 202 });
     }
 
     const payload = JSON.parse(rawBody) as {
@@ -152,108 +210,109 @@ export async function POST(req: NextRequest) {
       };
     };
 
-    // Filter for pull_request events (opened, synchronize, reopened)
-    if (eventType === 'pull_request') {
-      const action = payload.action;
-      if (action && ['opened', 'synchronize', 'reopened'].includes(action)) {
-        const pr = payload.pull_request;
-        const repo = payload.repository;
-
-        if (!pr || !repo) {
-          logger.warn('Malformed pull_request event payload received', {
-            module: 'webhook-handler',
-            action: 'parse-payload',
-          });
-          return NextResponse.json({ message: 'Malformed pull_request event ignored' }, { status: 200 });
-        }
-
-        const repoFullName = repo.full_name;
-        const prNumber = pr.number;
-        const commitSha = pr.head.sha;
-        const prTitle = pr.title || '';
-        const prAuthor = pr.user?.login || 'unknown';
-        const installationId = payload.installation?.id;
-
-        if (!installationId) {
-          logger.warn('Missing GitHub installation id in webhook', {
-            module: 'webhook-handler',
-            repoFullName,
-            prNumber,
-          });
-          return NextResponse.json({ message: 'Missing GitHub installation id' }, { status: 200 });
-        }
-
-        const storedRepo = await ensureRepoForInstallation({
-          githubInstallationId: String(installationId),
-          accountLogin: repo.owner?.login ?? repoFullName.split('/')[0],
-          fullName: repoFullName,
-        });
-
-        // 2. Idempotency Check
-        const existingRun = await findExistingReviewRun(storedRepo.id, prNumber, commitSha);
-        if (existingRun && (existingRun.status === 'completed' || existingRun.status === 'running')) {
-          logger.info('Duplicate webhook event detected — skipping review execution (idempotent)', {
-            module: 'webhook-handler',
-            action: 'idempotency-dedupe',
-            repoFullName,
-            prNumber,
-            commitSha: commitSha.substring(0, 7),
-            existingRunId: existingRun.id,
-          });
-          return NextResponse.json({
-            message: 'Duplicate event ignored (idempotent)',
-            reviewRunId: existingRun.id,
-            status: 'duplicate',
-          }, { status: 200 });
-        }
-
-        // 3. Create initial review_run row in Supabase DB
-        const reviewRun = await createReviewRun({
-          repo_id: storedRepo.id,
-          pr_number: prNumber,
-          pr_title: prTitle,
-          pr_author: prAuthor,
-          commit_sha: commitSha,
-          status: 'running',
-        });
-
-        // 4. Trigger Asynchronous Background Orchestration (Next.js 15 after API with background fallback)
-        const runBackgroundJob = () => {
-          processReviewInBackground({
-            installationId,
-            storedRepoId: storedRepo.id,
-            repoFullName,
-            prNumber,
-            commitSha,
-            prTitle,
-            prAuthor,
-            reviewRunId: reviewRun.id,
-            startTime,
-          }).catch((err) => {
-            logger.error('Background review task uncaught error', err);
-          });
-        };
-
-        try {
-          after(runBackgroundJob);
-        } catch {
-          // Fallback for non-Next server contexts (e.g. Unit tests / local edge mocks)
-          queueMicrotask(runBackgroundJob);
-        }
-
-        // 5. IMMEDIATE 202 ACCEPTED RESPONSE — Zero blocking on LLM/OSV calls
-        return NextResponse.json(
-          {
-            status: 'accepted',
-            message: 'Webhook received and autonomous review scheduled.',
-            reviewRunId: reviewRun.id,
-          },
-          { status: 202 }
-        );
-      }
+    const action = payload.action;
+    if (!action || !['opened', 'synchronize', 'reopened'].includes(action)) {
+      logger.info('Ignored unsupported pull_request action', {
+        module: 'webhook-handler',
+        action: 'unsupported-action',
+        actionName: action,
+      });
+      return NextResponse.json({ message: `Pull request action ${action || 'none'} ignored` }, { status: 202 });
     }
 
-    return NextResponse.json({ message: 'Event ignored' }, { status: 200 });
+    const pr = payload.pull_request;
+    const repo = payload.repository;
+
+    if (!pr || !repo) {
+      logger.warn('Malformed pull_request event payload received', {
+        module: 'webhook-handler',
+        action: 'parse-payload',
+      });
+      return NextResponse.json({ message: 'Malformed pull_request event ignored' }, { status: 200 });
+    }
+
+    const repoFullName = repo.full_name;
+    const prNumber = pr.number;
+    const commitSha = pr.head.sha;
+    const prTitle = pr.title || '';
+    const prAuthor = pr.user?.login || 'unknown';
+    const installationId = payload.installation?.id;
+
+    if (!installationId) {
+      logger.warn('Missing GitHub installation id in webhook', {
+        module: 'webhook-handler',
+        repoFullName,
+        prNumber,
+      });
+      return NextResponse.json({ message: 'Missing GitHub installation id' }, { status: 200 });
+    }
+
+    const storedRepo = await ensureRepoForInstallation({
+      githubInstallationId: String(installationId),
+      accountLogin: repo.owner?.login ?? repoFullName.split('/')[0],
+      fullName: repoFullName,
+    });
+
+    // 6. Idempotent Review Run Creation (ON CONFLICT DO NOTHING)
+    const { created, reviewRun } = await createReviewRunOnConflictDoNothing({
+      repo_id: storedRepo.id,
+      pr_number: prNumber,
+      pr_title: prTitle,
+      pr_author: prAuthor,
+      commit_sha: commitSha,
+      status: 'running',
+    });
+
+    if (!created) {
+      logger.info('Duplicate webhook event detected — skipping review execution (idempotent)', {
+        module: 'webhook-handler',
+        action: 'idempotency-dedupe',
+        repoFullName,
+        prNumber,
+        commitSha: commitSha.substring(0, 7),
+        existingRunId: reviewRun.id,
+      });
+      return NextResponse.json(
+        {
+          message: 'Duplicate event ignored (idempotent)',
+          reviewRunId: reviewRun.id,
+          status: 'duplicate',
+        },
+        { status: 200 }
+      );
+    }
+
+    // 7. Trigger Asynchronous Background Orchestration
+    const runBackgroundJob = () => {
+      processReviewInBackground({
+        installationId,
+        storedRepoId: storedRepo.id,
+        repoFullName,
+        prNumber,
+        commitSha,
+        prTitle,
+        prAuthor,
+        reviewRunId: reviewRun.id,
+        startTime,
+      }).catch((err) => {
+        logger.error('Background review task uncaught error', err);
+      });
+    };
+
+    try {
+      after(runBackgroundJob);
+    } catch {
+      queueMicrotask(runBackgroundJob);
+    }
+
+    return NextResponse.json(
+      {
+        status: 'accepted',
+        message: 'Webhook received and autonomous review scheduled.',
+        reviewRunId: reviewRun.id,
+      },
+      { status: 202 }
+    );
   } catch (err: unknown) {
     logger.error('Unhandled exception in GitHub webhook handler', err, {
       module: 'webhook-handler',
