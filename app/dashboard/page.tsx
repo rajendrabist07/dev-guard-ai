@@ -134,8 +134,15 @@ export default function DashboardPage() {
             ) : (
               <div className="text-2xl font-extrabold text-white">{stats.connectedRepos}</div>
             )}
-            <div className="text-[11px] text-emerald-400 font-mono flex items-center gap-1">
-              <CheckCircle2 className="w-3 h-3" /> Webhooks Active
+            <div className="text-[11px] font-mono flex items-center gap-1">
+              {stats.connectedRepos > 0 ? (
+                <>
+                  <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                  <span className="text-emerald-400">Installed & Monitored</span>
+                </>
+              ) : (
+                <span className="text-gray-500">No repositories installed</span>
+              )}
             </div>
           </div>
 
@@ -162,7 +169,7 @@ export default function DashboardPage() {
             ) : (
               <div className="text-2xl font-extrabold text-white">{stats.toolsExecuted}</div>
             )}
-            <div className="text-[11px] text-cyan-400 font-mono">AST, CVE & test runs</div>
+            <div className="text-[11px] text-cyan-400 font-mono">Rules, dependencies & tests</div>
           </div>
 
           <div className="p-5 rounded-2xl bg-gray-900/50 border border-gray-800/80 space-y-2">
@@ -184,13 +191,31 @@ export default function DashboardPage() {
           <div className="p-4 rounded-2xl bg-gray-900/40 border border-gray-800/80 space-y-1.5">
             <div className="flex items-center justify-between text-xs text-gray-400 font-medium">
               <span>Avg Cost / Review</span>
-              <span className="text-emerald-400 font-mono text-[11px] font-bold">52% savings</span>
+              {stats.adaptiveRoutingCostSavingsPercentage !== null && stats.adaptiveRoutingCostSavingsPercentage > 0 && (
+                <span className="text-emerald-400 font-mono text-[11px] font-bold">
+                  {stats.adaptiveRoutingCostSavingsPercentage}% savings
+                </span>
+              )}
             </div>
-            <div className="text-xl font-extrabold text-white font-mono flex items-baseline gap-2">
-              <span>${(stats.avgCostPerReviewUsd || 0.000072).toFixed(6)}</span>
-              <span className="text-xs text-gray-500 line-through font-normal">${(stats.baselineCostWithoutRoutingUsd || 0.000150).toFixed(6)}</span>
+            {stats.avgCostPerReviewUsd !== null && stats.avgCostPerReviewUsd !== undefined ? (
+              <div className="text-xl font-extrabold text-white font-mono flex items-baseline gap-2">
+                <span>${stats.avgCostPerReviewUsd.toFixed(6)}</span>
+                {stats.baselineCostWithoutRoutingUsd !== null && (
+                  <span className="text-xs text-gray-500 line-through font-normal">
+                    ${stats.baselineCostWithoutRoutingUsd.toFixed(6)}
+                  </span>
+                )}
+              </div>
+            ) : (
+              <div className="text-base font-semibold text-gray-400 font-mono py-0.5">
+                No data yet
+              </div>
+            )}
+            <div className="text-[11px] text-gray-400">
+              {stats.avgCostPerReviewUsd !== null
+                ? 'Adaptive complexity routing (Llama 70B ➡️ Flash ➡️ Fast)'
+                : 'Awaiting PR reviews to record actual token cost.'}
             </div>
-            <div className="text-[11px] text-gray-400">Adaptive complexity routing (Llama 70B ➡️ Flash ➡️ Fast)</div>
           </div>
 
           <div className="p-4 rounded-2xl bg-gray-900/40 border border-gray-800/80 space-y-1.5">
@@ -198,10 +223,20 @@ export default function DashboardPage() {
               <span>Pipeline Latency (p50 / p95)</span>
               <Clock className="w-3.5 h-3.5 text-amber-400" />
             </div>
-            <div className="text-xl font-extrabold text-white font-mono">
-              {stats.p50LatencySeconds ? `${stats.p50LatencySeconds}s` : '1.85s'} <span className="text-gray-500 text-sm font-normal">/</span> {stats.p95LatencySeconds ? `${stats.p95LatencySeconds}s` : '3.10s'}
+            {stats.p50LatencySeconds !== null && stats.p95LatencySeconds !== null ? (
+              <div className="text-xl font-extrabold text-white font-mono">
+                {stats.p50LatencySeconds}s <span className="text-gray-500 text-sm font-normal">/</span> {stats.p95LatencySeconds}s
+              </div>
+            ) : (
+              <div className="text-base font-semibold text-gray-400 font-mono py-0.5">
+                No data yet
+              </div>
+            )}
+            <div className="text-[11px] text-gray-400">
+              {stats.p50LatencySeconds !== null
+                ? 'End-to-end diagnostic runtime'
+                : 'Awaiting completed reviews to compute latency percentiles.'}
             </div>
-            <div className="text-[11px] text-gray-400">End-to-end diagnostic runtime</div>
           </div>
 
           <div className="p-4 rounded-2xl bg-gray-900/40 border border-gray-800/80 space-y-1.5">
@@ -275,8 +310,14 @@ export default function DashboardPage() {
                     </div>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
-                      Active
+                    <span
+                      className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border ${
+                        repo.is_active
+                          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                          : 'bg-gray-500/10 border-gray-500/30 text-gray-400'
+                      }`}
+                    >
+                      {repo.is_active ? 'Active' : 'Inactive'}
                     </span>
                   </div>
                 </div>
