@@ -12,7 +12,7 @@ import {
 import { DisplayReviewRun, Finding } from '@/lib/db/types';
 import { logger } from '@/lib/observability/logger';
 import { TryApiSchema } from '@/lib/validation/schemas';
-import { checkRateLimit } from '@/lib/security/ratelimit';
+import { checkRateLimit, checkGlobalLlmBudget } from '@/lib/security/ratelimit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = validationResult.data;
-    const { prTitle, prAuthor, diff, fileNames, sessionId, inputType, codeSnippet, files } = body;
+    const { prTitle, title: altTitle, prAuthor, author: altAuthor, diff, fileNames, sessionId, inputType, codeSnippet, files } = body;
 
     const sampleDiff =
       diff ||
@@ -96,13 +96,16 @@ export async function POST(req: NextRequest) {
         ? files
         : ['app/api/checkout/route.ts', 'package.json'];
 
-    const generatedRunId = `try-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const budgetStatus = await checkGlobalLlmBudget();
+    const circuitBreakerTriggered = budgetStatus.budgetExceeded;
+
+    const generatedRunId = crypto.randomUUID();
     const prNumber = Math.floor(Math.random() * 90) + 10;
-    const title = prTitle || (inputType === 'sample' ? 'Sample Buggy File Review' : 'Custom Code Snippet Review');
-    const author = prAuthor || 'visitor';
+    const title = prTitle || altTitle || (inputType === 'sample' ? 'Sample Buggy File Review' : 'Custom Code Snippet Review');
+    const author = prAuthor || altAuthor || 'visitor';
     const commitSha = Math.random().toString(36).substring(2, 10);
 
-    const isStream = req.headers.get('accept')?.includes('text/event-stream') || true;
+    const isStream = Boolean(req.headers.get('accept')?.includes('text/event-stream'));
 
     if (isStream) {
       const responseStream = new TransformStream();
@@ -166,7 +169,8 @@ export async function POST(req: NextRequest) {
               });
               // Brief micro-delay so UI transitions look clear
               await new Promise((resolve) => setTimeout(resolve, 300));
-            }
+            },
+            { forceDeterministic: circuitBreakerTriggered }
           );
 
           clearTimeout(timeoutTimer);
@@ -245,6 +249,7 @@ export async function POST(req: NextRequest) {
             summary: result.summary,
             findings: savedFindings,
             providerUsed: result.providerUsed,
+            circuitBreakerTriggered,
           });
         } catch (err: unknown) {
           clearTimeout(timeoutTimer);
@@ -282,7 +287,13 @@ export async function POST(req: NextRequest) {
     }
 
     // Standard JSON Fallback
-    const result = await runAgentOrchestrator(sampleDiff, targetFiles, generatedRunId);
+    const result = await runAgentOrchestrator(
+      sampleDiff,
+      targetFiles,
+      generatedRunId,
+      undefined,
+      { forceDeterministic: circuitBreakerTriggered }
+    );
     const tryRunRecord = await createTryRun({
       id: generatedRunId,
       session_id: sessionId || null,
@@ -313,6 +324,7 @@ export async function POST(req: NextRequest) {
       summary: result.summary,
       findings: tryRunRecord.findings,
       providerUsed: result.providerUsed,
+      circuitBreakerTriggered,
     });
   } catch (err: unknown) {
     logger.error('Unhandled error in try API route', err, {

@@ -99,7 +99,8 @@ export async function runAgentOrchestrator(
   prDiff: string,
   fileNames: string[],
   reviewRunId = 'sim-run',
-  onProgress?: (progress: ProgressUpdate) => void | Promise<void>
+  onProgress?: (progress: ProgressUpdate) => void | Promise<void>,
+  options?: { forceDeterministic?: boolean }
 ): Promise<OrchestrationResult> {
   // Pre-Execution Adaptive Complexity Classification & Routing
   const complexityRouting = classifyDiffComplexity(prDiff, fileNames);
@@ -290,11 +291,32 @@ export async function runAgentOrchestrator(
   ];
 
   const synthesisStart = Date.now();
-  const synthesis = await synthesizeReviewWithLLM({
-    prTitle: fileNames.join(', '),
-    diffSummary: `Modified ${fileNames.length} file(s): ${fileNames.slice(0, 3).join(', ')}`,
-    toolOutputs,
-  });
+  let synthesisProvider = 'Deterministic Rule Engine (LLM Demo Quota Conserved)';
+  let synthesisModel = 'deterministic-rules';
+  let fallbackTriggered = false;
+  let fallbackReason: string | undefined = undefined;
+  let reviewSummary = '';
+  let tokenCount = 0;
+  let estimatedCostUsd = 0;
+
+  if (options?.forceDeterministic) {
+    reviewSummary = findings.length === 0
+      ? '✅ Deterministic analysis passed cleanly: 0 security findings detected across modified files.'
+      : `⚠️ Deterministic analysis identified ${findings.length} security diagnostic findings. External AI synthesis skipped to conserve demonstration quota.`;
+  } else {
+    const synthesis = await synthesizeReviewWithLLM({
+      prTitle: fileNames.join(', '),
+      diffSummary: `Modified ${fileNames.length} file(s): ${fileNames.slice(0, 3).join(', ')}`,
+      toolOutputs,
+    });
+    synthesisProvider = synthesis.provider;
+    synthesisModel = synthesis.model;
+    fallbackTriggered = synthesis.fallbackTriggered;
+    fallbackReason = synthesis.fallbackReason;
+    reviewSummary = synthesis.summary;
+    tokenCount = synthesis.telemetry.totalTokens;
+    estimatedCostUsd = synthesis.telemetry.estimatedCostUsd;
+  }
   const synthesisMs = Date.now() - synthesisStart;
   const totalDurationMs = Date.now() - overallStart;
   const calibratedFindings = calibrateFindings(findings);
@@ -303,11 +325,11 @@ export async function runAgentOrchestrator(
     findings: calibratedFindings,
     trace,
     toolCallsCount: trace.length,
-    providerUsed: synthesis.provider,
-    modelUsed: synthesis.model,
-    fallbackTriggered: synthesis.fallbackTriggered,
-    fallbackReason: synthesis.fallbackReason,
-    summary: synthesis.summary,
+    providerUsed: synthesisProvider,
+    modelUsed: synthesisModel,
+    fallbackTriggered,
+    fallbackReason,
+    summary: reviewSummary,
     latencies: {
       linterMs,
       depsScanMs,
@@ -315,8 +337,8 @@ export async function runAgentOrchestrator(
       synthesisMs,
       totalDurationMs,
     },
-    tokenCount: synthesis.telemetry.totalTokens,
-    estimatedCostUsd: synthesis.telemetry.estimatedCostUsd,
+    tokenCount,
+    estimatedCostUsd,
     complexityRouting,
   };
 }

@@ -4,14 +4,16 @@ import { logger } from '@/lib/observability/logger';
 
 export const dynamic = 'force-dynamic';
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
-    if (!id) {
-      return NextResponse.json({ error: 'Run ID is required' }, { status: 400 });
+    if (!id || !UUID_REGEX.test(id)) {
+      return NextResponse.json({ error: 'Test run not found or expired' }, { status: 404 });
     }
 
     const run = await getTryRunById(id);
@@ -19,7 +21,24 @@ export async function GET(
       return NextResponse.json({ error: 'Test run not found or expired' }, { status: 404 });
     }
 
-    return NextResponse.json({ run });
+    // Enforce 30-day retention/expiry limit
+    const now = Date.now();
+    const expiresAt = run.expires_at
+      ? new Date(run.expires_at).getTime()
+      : new Date(run.created_at).getTime() + 30 * 24 * 60 * 60 * 1000;
+
+    if (now > expiresAt) {
+      return NextResponse.json({ error: 'Test run not found or expired' }, { status: 404 });
+    }
+
+    return NextResponse.json(
+      { run },
+      {
+        headers: {
+          'X-Robots-Tag': 'noindex, nofollow',
+        },
+      }
+    );
   } catch (err: unknown) {
     logger.error('Error fetching try run by ID', err, {
       module: 'try-api',
