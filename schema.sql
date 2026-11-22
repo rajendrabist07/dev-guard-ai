@@ -72,6 +72,15 @@ create table if not exists webhook_deliveries (
   created_at timestamptz not null default now()
 );
 
+create table if not exists system_logs (
+  id uuid primary key default gen_random_uuid(),
+  level text not null check (level in ('debug', 'info', 'warn', 'error')),
+  message text not null,
+  error text,
+  context jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
 create index if not exists idx_repos_installation_id on repos(installation_id);
 create index if not exists idx_repos_full_name on repos(full_name);
 create index if not exists idx_review_runs_repo_id on review_runs(repo_id);
@@ -82,6 +91,8 @@ create index if not exists idx_try_runs_session_id on try_runs(session_id);
 create index if not exists idx_try_runs_created_at on try_runs(created_at desc);
 create index if not exists idx_try_runs_expires_at on try_runs(expires_at);
 create index if not exists idx_webhook_deliveries_delivery_id on webhook_deliveries(delivery_id);
+create index if not exists idx_system_logs_created_at on system_logs(created_at desc);
+create index if not exists idx_system_logs_level on system_logs(level);
 
 -- ==============================================================================
 -- ROW-LEVEL SECURITY (RLS) POLICIES — ZERO-TRUST ACCESS CONTROL
@@ -94,6 +105,7 @@ alter table review_runs enable row level security;
 alter table findings enable row level security;
 alter table try_runs enable row level security;
 alter table webhook_deliveries enable row level security;
+alter table system_logs enable row level security;
 
 -- 2. Service Role Bypass (For webhook ingestion, automated workers, and backend services)
 create policy "Service role has full access to installations"
@@ -123,6 +135,11 @@ create policy "Service role has full access to try_runs"
 
 create policy "Service role has full access to webhook_deliveries"
   on webhook_deliveries for all
+  using (auth.role() = 'service_role')
+  with check (auth.role() = 'service_role');
+
+create policy "Service role has full access to system_logs"
+  on system_logs for all
   using (auth.role() = 'service_role')
   with check (auth.role() = 'service_role');
 

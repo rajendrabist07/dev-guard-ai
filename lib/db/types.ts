@@ -75,6 +75,15 @@ export interface TryRun {
   created_at: string;
 }
 
+export interface SystemLog {
+  id: string;
+  level: 'debug' | 'info' | 'warn' | 'error';
+  message: string;
+  error?: string | null;
+  context: Record<string, unknown>;
+  created_at: string;
+}
+
 export type DisplayReviewRun = ReviewRun;
 
 export type NewReviewRun = Pick<ReviewRun, 'repo_id' | 'pr_number' | 'commit_sha' | 'status'> &
@@ -100,11 +109,11 @@ export interface DashboardStats {
   toolsExecuted: number;
   securityFindings: number;
   avgReviewTimeSeconds: number | null;
-  avgCostPerReviewUsd: number;
-  baselineCostWithoutRoutingUsd: number;
-  adaptiveRoutingCostSavingsPercentage: number;
-  p50LatencySeconds: number;
-  p95LatencySeconds: number;
+  avgCostPerReviewUsd: number | null;
+  baselineCostWithoutRoutingUsd: number | null;
+  adaptiveRoutingCostSavingsPercentage: number | null;
+  p50LatencySeconds: number | null;
+  p95LatencySeconds: number | null;
   osvCacheHitRatePercentage: number;
 }
 
@@ -141,9 +150,9 @@ export interface AnalyticsData {
   avgReviewTimeSeconds: number | null;
   hasEnoughData: boolean;
   totalFindingsAnalyzed: number;
-  avgCostUsd: number;
-  p50Latency: number;
-  p95Latency: number;
+  avgCostUsd: number | null;
+  p50Latency: number | null;
+  p95Latency: number | null;
   cacheHitRate: number;
 }
 

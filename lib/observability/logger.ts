@@ -31,11 +31,14 @@ export function getRecentStructuredLogs(limit = 50): StructuredLogEntry[] {
 }
 
 const SENSITIVE_PATTERNS = [
-  /sk_live_[a-zA-Z0-9_-]+/gi,
-  /ghp_[a-zA-Z0-9_-]+/gi,
+  /(?:Bearer|Token)\s+[a-zA-Z0-9_\-\.=]+/gi,
+  /(?:ghp|gho|ghu|ghs|ghr)_[a-zA-Z0-9_-]+/gi,
+  /github_pat_[a-zA-Z0-9_=-]+/gi,
+  /gsk_[a-zA-Z0-9_-]+/gi,
   /AIza[0-9A-Za-z-_]{35}/gi,
-  /eyJhbGciOi[a-zA-Z0-9_.-]+/gi, // JWT
-  /(?:password|secret|key|token|signature|authorization)\s*[:=]\s*['"]?([^\s'"]+)['"]?/gi,
+  /sk_(?:live|test)_[a-zA-Z0-9_-]+/gi,
+  /eyJ[a-zA-Z0-9_=-]+\.[a-zA-Z0-9_=-]+\.[a-zA-Z0-9_=-]+/gi,
+  /(?:password|secret|key|token|signature|apikey)\s*[:=]\s*['"]?([^\s'"]+)['"]?/gi,
 ];
 
 /**
@@ -58,13 +61,20 @@ export function scrubSecrets(input: unknown): unknown {
     const output: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(input)) {
       const lowerKey = key.toLowerCase();
-      if (
+      const isSensitiveKey =
         lowerKey.includes('secret') ||
-        lowerKey.includes('key') ||
         lowerKey.includes('token') ||
         lowerKey.includes('signature') ||
-        lowerKey.includes('auth')
-      ) {
+        lowerKey.includes('cookie') ||
+        lowerKey.includes('password') ||
+        lowerKey.includes('apikey') ||
+        lowerKey === 'key' ||
+        lowerKey === 'authorization' ||
+        lowerKey === 'auth_header';
+
+      if (value !== null && typeof value === 'object') {
+        output[key] = scrubSecrets(value);
+      } else if (isSensitiveKey) {
         output[key] = '[REDACTED_SECRET]';
       } else {
         output[key] = scrubSecrets(value);
@@ -81,6 +91,63 @@ function appendToBuffer(entry: StructuredLogEntry) {
     inMemoryLogBuffer.shift();
   }
   inMemoryLogBuffer.push(entry);
+
+  // Asynchronously persist to Supabase if configured (fire and forget)
+  void persistLogToDatabase(entry);
+}
+
+async function persistLogToDatabase(entry: StructuredLogEntry) {
+  try {
+    // Only attempt if supabase environment variables exist
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      const { getSupabaseAdmin } = await import('@/lib/db/supabase');
+      const admin = getSupabaseAdmin();
+      if (admin) {
+        await admin.from('system_logs').insert({
+          level: entry.level,
+          message: entry.message,
+          error: entry.error,
+          context: entry.context || {},
+        });
+      }
+    }
+  } catch {
+    // Non-blocking: background logging failures must never crash runtime requests
+  }
+}
+
+/**
+ * Retrieves recent structured logs with persistent database fallback.
+ */
+export async function fetchStructuredLogs(limit = 50): Promise<StructuredLogEntry[]> {
+  try {
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      const { getSupabaseAdmin } = await import('@/lib/db/supabase');
+      const admin = getSupabaseAdmin();
+      if (admin) {
+        const { data, error } = await admin
+          .from('system_logs')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(limit);
+
+        if (!error && data && data.length > 0) {
+          return data.map((d) => ({
+            id: d.id,
+            timestamp: d.created_at,
+            level: d.level as LogLevel,
+            message: d.message,
+            error: d.error,
+            context: (d.context as LogContext) || undefined,
+          }));
+        }
+      }
+    }
+  } catch {
+    // Fall back to in-memory buffer
+  }
+
+  return getRecentStructuredLogs(limit);
 }
 
 /**
