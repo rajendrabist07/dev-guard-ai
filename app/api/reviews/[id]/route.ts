@@ -1,33 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getReviewRunById } from '@/lib/db/supabase';
-import { authenticateRequest, verifyReviewRunOwnership } from '@/lib/security/auth';
+import {
+  requireReviewRunAccess,
+  UnauthorizedError,
+  ForbiddenError,
+  NotFoundError,
+} from '@/lib/security/auth';
 
 export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     const params = await context.params;
     const { id } = params;
-    const { run, findings } = await getReviewRunById(id);
 
-    if (!run) {
-      return NextResponse.json({ error: 'Review run not found' }, { status: 404 });
-    }
-
-    // Defense in Depth: Explicit application-layer ownership verification
-    const auth = await authenticateRequest(req);
-    const hasAccess = await verifyReviewRunOwnership(run, auth);
-
-    if (!hasAccess) {
-      return NextResponse.json(
-        { error: 'Forbidden: You do not have permission to access this review run.' },
-        { status: 403 }
-      );
-    }
+    // Single authorization layer: verifies identity, repo ownership, or public simulation status
+    const { run, findings } = await requireReviewRunAccess(id, req);
 
     return NextResponse.json({
       run,
       findings,
     });
   } catch (err: unknown) {
+    if (err instanceof NotFoundError) {
+      return NextResponse.json({ error: err.message }, { status: 404 });
+    }
+    if (err instanceof UnauthorizedError) {
+      return NextResponse.json({ error: err.message }, { status: 401 });
+    }
+    if (err instanceof ForbiddenError) {
+      return NextResponse.json({ error: err.message }, { status: 403 });
+    }
     const message = err instanceof Error ? err.message : 'Server error';
     return NextResponse.json({ error: message }, { status: 500 });
   }

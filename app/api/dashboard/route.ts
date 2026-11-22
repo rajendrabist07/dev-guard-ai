@@ -1,16 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDashboardData } from '@/lib/db/supabase';
-import { authenticateRequest } from '@/lib/security/auth';
+import { authenticateRequest, requireUser, UnauthorizedError, ForbiddenError } from '@/lib/security/auth';
 
 export async function GET(req: NextRequest) {
   try {
+    // Single authorization layer: require user session
+    await requireUser(req);
     const auth = await authenticateRequest(req);
-    // If authenticated, scope dashboard to user's authorized repos; if guest demo, show public demo data
-    const accessibleRepoIds = auth.isAuthenticated ? auth.accessibleRepoIds : undefined;
-    const data = await getDashboardData(accessibleRepoIds);
+    
+    // Authorized user gets access only to their verified repositories
+    const data = await getDashboardData(auth.accessibleRepoIds);
     return NextResponse.json(data);
   } catch (err: unknown) {
-    console.error('Error loading dashboard data:', err);
+    if (err instanceof UnauthorizedError) {
+      return NextResponse.json({ error: err.message }, { status: 401 });
+    }
+    if (err instanceof ForbiddenError) {
+      return NextResponse.json({ error: err.message }, { status: 403 });
+    }
     const message = err instanceof Error ? err.message : 'Dashboard data could not be loaded.';
     return NextResponse.json({ error: message }, { status: 500 });
   }

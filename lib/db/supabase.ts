@@ -27,6 +27,26 @@ export const supabaseAdmin = supabaseUrl && supabaseServiceKey ? createClient(su
 export const inMemorySimulations = new Map<string, { run: DisplayReviewRun; findings: Finding[] }>();
 export const inMemoryTryRuns = new Map<string, TryRun>();
 
+export function getSupabaseAdmin() {
+  return supabaseAdmin;
+}
+
+export function createUserClient(token?: string) {
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return null;
+  }
+  if (!token) {
+    return supabase;
+  }
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    global: {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  });
+}
+
 function requireSupabaseAdmin() {
   if (!supabaseAdmin) {
     throw new Error('Supabase server environment variables are not configured.');

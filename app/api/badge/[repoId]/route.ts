@@ -40,7 +40,7 @@ export async function GET(
         repoQuery = repoQuery.eq('id', rawId);
       } else {
         const normalizedFullName = rawId.replace(/--/g, '/').replace(/-/, '/');
-        repoQuery = repoQuery.or(`full_name.eq.${rawId},full_name.eq.${normalizedFullName}`);
+        repoQuery = repoQuery.in('full_name', [rawId, normalizedFullName]);
       }
 
       const { data: repoData } = await repoQuery.maybeSingle();
