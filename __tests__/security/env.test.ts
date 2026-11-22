@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { validateEnv, sanitizeServerEnvForClient } from '@/lib/env';
 
 describe('P0 Security — Environment Variable Validation (lib/env.ts)', () => {

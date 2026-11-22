@@ -144,9 +144,7 @@ describe('P0 Security — Webhook Hardening & Idempotency (app/api/webhooks/gith
       vi.spyOn(supabaseModule, 'ensureRepoForInstallation').mockResolvedValue({
         id: 'repo-1',
         installation_id: 'inst-1',
-        name: 'test-repo',
         full_name: 'test-org/test-repo',
-        private: false,
         is_active: true,
         created_at: new Date().toISOString(),
       });
@@ -160,6 +158,8 @@ describe('P0 Security — Webhook Hardening & Idempotency (app/api/webhooks/gith
           pr_number: 10,
           commit_sha: 'abc1234',
           status: 'completed',
+          started_at: new Date().toISOString(),
+          completed_at: new Date().toISOString(),
           pr_title: 'PR #10',
           pr_author: 'dev',
           tool_calls_count: 1,

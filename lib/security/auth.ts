@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { getSupabaseAdmin, getReviewRunById } from '@/lib/db/supabase';
+import { DisplayReviewRun, Finding } from '@/lib/db/types';
 
 export class UnauthorizedError extends Error {
   readonly statusCode = 401;
@@ -84,9 +85,12 @@ function extractAuthToken(req: NextRequest | Request | { headers: Headers } | nu
  * `user_metadata` is user-editable on the client via `supabase.auth.updateUser()`.
  * Identity MUST be derived exclusively from `user.identities` where `provider === 'github'`.
  */
-function extractVerifiedGitHubIdentity(user: any): { githubId?: string; githubLogin?: string } {
+function extractVerifiedGitHubIdentity(user: {
+  identities?: Array<{ provider?: string; id?: string; identity_data?: Record<string, unknown> }>;
+  app_metadata?: Record<string, unknown>;
+}): { githubId?: string; githubLogin?: string } {
   const identities = Array.isArray(user.identities) ? user.identities : [];
-  const githubIdentity = identities.find((id: any) => id.provider === 'github');
+  const githubIdentity = identities.find((id) => id?.provider === 'github');
 
   if (githubIdentity) {
     const data = githubIdentity.identity_data || {};
@@ -167,7 +171,7 @@ export async function authenticateRequest(
     }
 
     const { data: installations } = await instQuery;
-    const instIds = (installations || []).map((i: any) => i.id);
+    const instIds = (installations || []).map((i: { id: string }) => i.id);
 
     let accessibleRepoIds: string[] = [];
     if (instIds.length > 0) {
@@ -175,7 +179,7 @@ export async function authenticateRequest(
         .from('repos')
         .select('id')
         .in('installation_id', instIds);
-      accessibleRepoIds = (repos || []).map((r: any) => r.id);
+      accessibleRepoIds = (repos || []).map((r: { id: string }) => r.id);
     }
 
     return {
@@ -217,7 +221,7 @@ export async function requireRepoAccess(
   repoId: string,
   req: NextRequest | Request | { headers: Headers } | null,
   internalContext?: AuthContext
-): Promise<{ id: string; [key: string]: any }> {
+): Promise<{ id: string; [key: string]: unknown }> {
   if (internalContext?.isInternalServiceCall) {
     return { id: repoId };
   }
@@ -247,7 +251,7 @@ export async function requireRepoAccess(
     throw new ForbiddenError('Access to this repository is denied.');
   }
 
-  const inst = repo.installations as { github_installation_id: string; account_login: string } | null;
+  const inst = repo.installations as unknown as { github_installation_id: string; account_login: string } | null;
   if (!inst) {
     throw new ForbiddenError('Access to this repository is denied.');
   }
@@ -268,7 +272,7 @@ export async function requireReviewRunAccess(
   runId: string,
   req: NextRequest | Request | { headers: Headers } | null,
   internalContext?: AuthContext
-): Promise<{ run: any; findings: any[] }> {
+): Promise<{ run: DisplayReviewRun; findings: Finding[] }> {
   const { run, findings } = await getReviewRunById(runId);
   if (!run) {
     throw new NotFoundError('Review run not found.');

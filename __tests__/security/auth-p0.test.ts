@@ -85,7 +85,7 @@ describe('P0 Security — Authentication & Authorization Layer (lib/security/aut
           }),
         }),
       };
-      vi.spyOn(supabaseModule, 'getSupabaseAdmin').mockReturnValue(mockSupabase as any);
+      vi.spyOn(supabaseModule, 'getSupabaseAdmin').mockReturnValue(mockSupabase as unknown as ReturnType<typeof supabaseModule.getSupabaseAdmin>);
 
       const req = new NextRequest('http://localhost:3000/api/dashboard', {
         headers: {
@@ -133,7 +133,7 @@ describe('P0 Security — Authentication & Authorization Layer (lib/security/aut
           }),
         }),
       };
-      vi.spyOn(supabaseModule, 'getSupabaseAdmin').mockReturnValue(mockSupabase as any);
+      vi.spyOn(supabaseModule, 'getSupabaseAdmin').mockReturnValue(mockSupabase as unknown as ReturnType<typeof supabaseModule.getSupabaseAdmin>);
 
       const req = new NextRequest('http://localhost:3000/api/dashboard', {
         headers: { authorization: 'Bearer token-with-injection-username' },
@@ -190,7 +190,7 @@ describe('P0 Security — Authentication & Authorization Layer (lib/security/aut
           };
         }),
       };
-      vi.spyOn(supabaseModule, 'getSupabaseAdmin').mockReturnValue(mockSupabase as any);
+      vi.spyOn(supabaseModule, 'getSupabaseAdmin').mockReturnValue(mockSupabase as unknown as ReturnType<typeof supabaseModule.getSupabaseAdmin>);
 
       const req = new NextRequest('http://localhost:3000/api/dashboard', {
         headers: { authorization: 'Bearer token-user-b' },
@@ -207,6 +207,8 @@ describe('P0 Security — Authentication & Authorization Layer (lib/security/aut
           pr_number: 1,
           commit_sha: 'abc1234',
           status: 'completed',
+          started_at: new Date().toISOString(),
+          completed_at: new Date().toISOString(),
           pr_title: 'Confidential feature',
           pr_author: 'user-a',
           tool_calls_count: 0,
@@ -251,7 +253,7 @@ describe('P0 Security — Authentication & Authorization Layer (lib/security/aut
           }),
         }),
       };
-      vi.spyOn(supabaseModule, 'getSupabaseAdmin').mockReturnValue(mockSupabase as any);
+      vi.spyOn(supabaseModule, 'getSupabaseAdmin').mockReturnValue(mockSupabase as unknown as ReturnType<typeof supabaseModule.getSupabaseAdmin>);
 
       const req = new NextRequest('http://localhost:3000/api/reviews/run-user-a', {
         headers: { authorization: 'Bearer token-user-b' },
@@ -268,6 +270,8 @@ describe('P0 Security — Authentication & Authorization Layer (lib/security/aut
           pr_number: 1,
           commit_sha: '1234567',
           status: 'completed',
+          started_at: new Date().toISOString(),
+          completed_at: new Date().toISOString(),
           pr_title: 'Demo simulation PR',
           pr_author: 'demo',
           tool_calls_count: 1,

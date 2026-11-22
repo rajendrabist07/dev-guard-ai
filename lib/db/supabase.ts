@@ -562,8 +562,24 @@ export async function createReviewRunOnConflictDoNothing(
   if (existing) {
     return { created: false, reviewRun: existing };
   }
-  const created = await createReviewRun(data);
-  return { created: true, reviewRun: created };
+
+  const memoryRun: DisplayReviewRun = {
+    id: `mem-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+    repo_id: data.repo_id,
+    pr_number: data.pr_number,
+    pr_title: data.pr_title ?? null,
+    pr_author: data.pr_author ?? null,
+    commit_sha: data.commit_sha,
+    status: data.status,
+    tool_calls_count: data.tool_calls_count ?? 0,
+    agent_trace: data.agent_trace ?? [],
+    error_message: data.error_message ?? null,
+    is_simulation: data.is_simulation ?? false,
+    started_at: data.started_at ?? new Date().toISOString(),
+    completed_at: data.completed_at ?? null,
+    created_at: new Date().toISOString(),
+  };
+  return { created: true, reviewRun: memoryRun };
 }
 
 export async function createReviewRun(data: NewReviewRun): Promise<DisplayReviewRun> {

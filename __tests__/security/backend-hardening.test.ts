@@ -61,8 +61,9 @@ describe('Sprint 9 — Full Backend Hardening & Cross-Cutting Resilience Tests',
     it('returns structured JSON with 500 status when database throws uncaught error', async () => {
       vi.spyOn(supabaseModule, 'getTryRunById').mockRejectedValue(new Error('Connection failure'));
 
-      const req = new NextRequest('http://localhost:3000/api/try/result/test-err-id');
-      const res = await getResultHandler(req, { params: Promise.resolve({ id: 'test-err-id' }) });
+      const validUuid = '12345678-1234-4234-8234-123456789abc';
+      const req = new NextRequest(`http://localhost:3000/api/try/result/${validUuid}`);
+      const res = await getResultHandler(req, { params: Promise.resolve({ id: validUuid }) });
 
       expect(res.status).toBe(500);
       const json = await res.json();

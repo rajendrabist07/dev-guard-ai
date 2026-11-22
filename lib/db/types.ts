@@ -71,6 +71,7 @@ export interface TryRun {
   summary: string | null;
   provider_used: string | null;
   status: string;
+  expires_at?: string;
   created_at: string;
 }
 

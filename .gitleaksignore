@@ -1,0 +1,8 @@
+# Gitleaks ignore file for DevGuard AI synthetic test fixtures and evaluation datasets
+2dccde4d8a74bdedc6672d39feb43225d1f1e9b6:docs/AUDIT_BASELINE.md:stripe-access-token:227
+2dccde4d8a74bdedc6672d39feb43225d1f1e9b6:docs/AUDIT_BASELINE.md:github-pat:227
+6da32d4079d27fc5963b1557210311d098d10b2d:__tests__/agent/failure-modes.test.ts:generic-api-key:69
+74b80ece8c6e71942d62ed34f443fffd9f9707f4:evals/dataset.json:gcp-api-key:105
+a0bedfa0644d5a90ae0264f6dcafdc0e41c99b96:__tests__/observability/logger.test.ts:stripe-access-token:6
+a0bedfa0644d5a90ae0264f6dcafdc0e41c99b96:__tests__/observability/logger.test.ts:stripe-access-token:10
+a0bedfa0644d5a90ae0264f6dcafdc0e41c99b96:__tests__/observability/logger.test.ts:generic-api-key:6

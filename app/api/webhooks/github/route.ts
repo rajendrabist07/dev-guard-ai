@@ -8,7 +8,6 @@ import {
 import {
   createReviewRunOnConflictDoNothing,
   ensureRepoForInstallation,
-  findExistingReviewRun,
   recordWebhookDelivery,
   saveFindings,
   updateReviewRun,
@@ -141,7 +140,7 @@ export async function POST(req: NextRequest) {
     const eventType = req.headers.get('x-github-event') || '';
     const deliveryId = req.headers.get('x-github-delivery');
 
-    // 2. Reject Missing Required Headers
+    // 2. Reject Missing or Invalid Signature Header (401)
     if (!signature) {
       logger.warn('Rejected GitHub webhook missing x-hub-signature-256 header', {
         module: 'webhook-handler',
@@ -151,16 +150,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing x-hub-signature-256 header' }, { status: 401 });
     }
 
-    if (!deliveryId) {
-      logger.warn('Rejected GitHub webhook missing x-github-delivery header', {
-        module: 'webhook-handler',
-        action: 'verify-delivery',
-        eventType,
-      });
-      return NextResponse.json({ error: 'Missing x-github-delivery header' }, { status: 400 });
-    }
-
-    // 3. Verify Webhook Signature via Timing-Safe HMAC-SHA256
+    // Verify Webhook Signature via Timing-Safe HMAC-SHA256
     const isValid = await verifyGitHubWebhook(rawBody, signature);
     if (!isValid) {
       logger.warn('Rejected GitHub webhook due to invalid HMAC-SHA256 signature', {
@@ -169,6 +159,16 @@ export async function POST(req: NextRequest) {
         eventType,
       });
       return NextResponse.json({ error: 'Invalid webhook signature' }, { status: 401 });
+    }
+
+    // 3. Reject Missing Delivery ID (400)
+    if (!deliveryId) {
+      logger.warn('Rejected GitHub webhook missing x-github-delivery header', {
+        module: 'webhook-handler',
+        action: 'verify-delivery',
+        eventType,
+      });
+      return NextResponse.json({ error: 'Missing x-github-delivery header' }, { status: 400 });
     }
 
     // 4. Delivery ID Replay Prevention

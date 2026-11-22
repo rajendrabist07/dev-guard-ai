@@ -181,10 +181,27 @@ function extractRecommendedFix(vuln: { affected?: OsvAffected[] }): string | und
   return undefined;
 }
 
+// Official npm package name regex for SSRF and injection prevention
+export const NPM_PACKAGE_NAME_REGEX = /^(?:@[a-z0-9-*~][a-z0-9-*._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/i;
+
+// Hardcoded allowlist of permitted outbound API hosts
+export const ALLOWED_OUTBOUND_HOSTS = new Set([
+  'api.osv.dev',
+  'api.github.com',
+  'api.groq.com',
+  'generativelanguage.googleapis.com',
+]);
+
 /**
  * Dynamically queries the OSV.dev database with multi-tier Redis caching.
+ * Validates package names to prevent SSRF or cache poisoning.
  */
 async function queryOsvForDependency(pkgName: string, version: string): Promise<VulnerabilityResult[]> {
+  // Reject invalid package names immediately
+  if (!NPM_PACKAGE_NAME_REGEX.test(pkgName)) {
+    return [];
+  }
+
   const cacheKey = `osv:npm:${pkgName}:${version}`;
 
   try {
@@ -196,10 +213,16 @@ async function queryOsvForDependency(pkgName: string, version: string): Promise<
     // Cache read failed, proceed to fetch
   }
 
+  const targetUrl = 'https://api.osv.dev/v1/query';
+  const urlObj = new URL(targetUrl);
+  if (!ALLOWED_OUTBOUND_HOSTS.has(urlObj.hostname)) {
+    throw new Error(`SSRF Prevention: Outbound request to ${urlObj.hostname} is forbidden.`);
+  }
+
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 3000);
-    const res = await fetch('https://api.osv.dev/v1/query', {
+    const res = await fetch(targetUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       signal: controller.signal,

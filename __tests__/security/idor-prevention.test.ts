@@ -137,7 +137,7 @@ describe('Sprint 1 — RLS & Unauthenticated IDOR Prevention Tests', () => {
         }),
       }),
     };
-    vi.spyOn(supabaseModule, 'getSupabaseAdmin').mockReturnValue(mockSupabase as any);
+    vi.spyOn(supabaseModule, 'getSupabaseAdmin').mockReturnValue(mockSupabase as unknown as ReturnType<typeof supabaseModule.getSupabaseAdmin>);
 
     // Request from User B with verified JWT token
     const req = new NextRequest('http://localhost:3000/api/reviews/run-tenant-a', {

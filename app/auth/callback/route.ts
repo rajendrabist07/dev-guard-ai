@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
     const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
     if (supabaseUrl && supabaseAnonKey) {
-      let response = NextResponse.redirect(`${origin}${next}`);
+      const response = NextResponse.redirect(`${origin}${next}`);
 
       const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
         cookies: {

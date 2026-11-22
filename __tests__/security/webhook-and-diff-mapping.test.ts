@@ -20,14 +20,14 @@ describe('Sprint 5 & 6 — Webhook Non-blocking Pipeline & Git Diff Line Mapping
       created_at: new Date().toISOString(),
     });
     vi.spyOn(supabaseModule, 'findExistingReviewRun').mockResolvedValue(null);
-    vi.spyOn(supabaseModule, 'createReviewRun').mockResolvedValue({
+    const mockReviewRun = {
       id: 'run-async-123',
       repo_id: 'repo-1',
       pr_number: 99,
       pr_title: 'Async review test',
       pr_author: 'lead-dev',
       commit_sha: '1234567890',
-      status: 'running',
+      status: 'running' as const,
       started_at: new Date().toISOString(),
       completed_at: null,
       tool_calls_count: 0,
@@ -35,6 +35,11 @@ describe('Sprint 5 & 6 — Webhook Non-blocking Pipeline & Git Diff Line Mapping
       error_message: null,
       is_simulation: false,
       created_at: new Date().toISOString(),
+    };
+    vi.spyOn(supabaseModule, 'createReviewRun').mockResolvedValue(mockReviewRun);
+    vi.spyOn(supabaseModule, 'createReviewRunOnConflictDoNothing').mockResolvedValue({
+      created: true,
+      reviewRun: mockReviewRun,
     });
 
     const payload = {
@@ -57,6 +62,7 @@ describe('Sprint 5 & 6 — Webhook Non-blocking Pipeline & Git Diff Line Mapping
       headers: {
         'x-hub-signature-256': 'sha256=mocked',
         'x-github-event': 'pull_request',
+        'x-github-delivery': 'delivery-uuid-async',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
