@@ -37,6 +37,22 @@ export function resetCacheStats(): void {
 }
 
 /**
+ * Pings Upstash Redis to determine live connection health.
+ */
+export async function pingRedis(): Promise<{ ok: boolean; configured: boolean; latencyMs?: number }> {
+  if (!redisClient) {
+    return { ok: false, configured: false };
+  }
+  const start = Date.now();
+  try {
+    const res = await redisClient.ping();
+    return { ok: res === 'PONG' || Boolean(res), configured: true, latencyMs: Date.now() - start };
+  } catch {
+    return { ok: false, configured: true, latencyMs: Date.now() - start };
+  }
+}
+
+/**
  * Retrieves a cached value by key from Upstash Redis or local memory fallback.
  */
 export async function getCachedValue<T>(key: string): Promise<T | null> {

@@ -14,17 +14,27 @@ import {
   Terminal,
   ExternalLink,
 } from 'lucide-react';
+import {
+  ObservabilityHealthState,
+  getHealthStatusDisplay,
+} from '@/lib/observability/health';
 
 interface ObservabilityData {
-  systemStatus: 'healthy' | 'degraded';
+  systemStatus: ObservabilityHealthState;
+  statusReason?: string;
   timestamp: string;
   sentryConfigured: boolean;
+  services?: {
+    database: { configured: boolean; status: string; latencyMs?: number; error?: string };
+    redis: { configured: boolean; status: string; latencyMs?: number };
+  };
   metrics: {
     totalRunsProcessed: number;
     activeWebhooks: number;
     interactiveTryRuns: number;
     modelFallbacksTriggered: number;
     failedRunsCount: number;
+    errorRatePercentage?: number;
     osvCacheHitRate: number;
     totalCacheLookups: number;
     totalCacheHits: number;
@@ -123,19 +133,30 @@ export default function ObservabilityPage() {
 
         {/* Operational Health Stat Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="p-5 rounded-2xl bg-gray-900/60 border border-gray-800 space-y-2">
-            <div className="flex items-center justify-between text-xs text-gray-400 font-medium">
-              <span>System Health</span>
-              <Server className="w-4 h-4 text-emerald-400" />
-            </div>
-            <div className="text-2xl font-extrabold text-white flex items-center gap-2">
-              <span className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse" />
-              <span>{data?.systemStatus === 'healthy' ? 'Operational' : 'Degraded'}</span>
-            </div>
-            <div className="text-[11px] text-gray-400 font-mono">
-              {data?.metrics.totalRunsProcessed ?? 0} total reviews processed
-            </div>
-          </div>
+          {/* Operational Health Stat Cards */}
+          {(() => {
+            const healthDisplay = getHealthStatusDisplay(data?.systemStatus || 'no_data');
+            return (
+              <div className="p-5 rounded-2xl bg-gray-900/60 border border-gray-800 space-y-2">
+                <div className="flex items-center justify-between text-xs text-gray-400 font-medium">
+                  <span>System Health</span>
+                  <Server className="w-4 h-4 text-emerald-400" />
+                </div>
+                <div className="text-2xl font-extrabold flex items-center gap-2">
+                  <span className={`w-3 h-3 rounded-full animate-pulse ${healthDisplay.dotClass}`} />
+                  <span className={healthDisplay.colorClass}>{healthDisplay.label}</span>
+                </div>
+                <div className="text-[11px] text-gray-400 font-mono">
+                  {data?.metrics?.totalRunsProcessed ?? 0} total reviews processed
+                </div>
+                {data?.statusReason && (
+                  <div className="text-[10px] text-gray-500 font-mono truncate">
+                    {data.statusReason}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           <div className="p-5 rounded-2xl bg-gray-900/60 border border-gray-800 space-y-2">
             <div className="flex items-center justify-between text-xs text-gray-400 font-medium">
@@ -145,7 +166,7 @@ export default function ObservabilityPage() {
             <div className="text-2xl font-extrabold text-amber-400 font-mono">
               {data?.metrics.modelFallbacksTriggered ?? 0}
             </div>
-            <div className="text-[11px] text-gray-400 font-mono">Groq 429 ➡️ Gemini 2.5 Flash</div>
+            <div className="text-[11px] text-gray-400 font-mono">Groq 429 ➡️ Gemini 2.0 Flash</div>
           </div>
 
           <div className="p-5 rounded-2xl bg-gray-900/60 border border-gray-800 space-y-2">
@@ -197,7 +218,9 @@ export default function ObservabilityPage() {
 
           {(!data?.fallbackEvents || data.fallbackEvents.length === 0) ? (
             <div className="py-8 text-center text-xs text-gray-500 font-mono bg-gray-950/40 rounded-xl border border-gray-800/50">
-              0 model fallbacks triggered in current session. Groq Llama 3.3 70B operating smoothly within rate limits.
+              {(data?.metrics?.totalRunsProcessed ?? 0) === 0
+                ? 'No reviews processed yet. Model fallback events will be recorded here when primary provider encounters rate limits or errors.'
+                : `0 model fallbacks triggered across ${data?.metrics?.totalRunsProcessed} review runs. Primary model handled all synthesis requests.`}
             </div>
           ) : (
             <div className="divide-y divide-gray-800/60 font-mono text-xs">

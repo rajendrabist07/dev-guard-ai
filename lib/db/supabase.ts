@@ -14,6 +14,7 @@ import {
   TryRun,
 } from './types';
 import { getCacheStats, getCachedValue, setCachedValue } from '@/lib/cache/redis';
+import { calculateModelCost } from '@/lib/config/models';
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -29,6 +30,30 @@ export const inMemoryTryRuns = new Map<string, TryRun>();
 
 export function getSupabaseAdmin() {
   return supabaseAdmin;
+}
+
+/**
+ * Pings Supabase PostgreSQL to determine live connection health.
+ */
+export async function pingDatabase(): Promise<{ ok: boolean; configured: boolean; latencyMs?: number; error?: string }> {
+  if (!supabaseAdmin) {
+    return { ok: false, configured: false };
+  }
+  const start = Date.now();
+  try {
+    const { error } = await supabaseAdmin.from('installations').select('id').limit(1);
+    if (error) {
+      return { ok: false, configured: true, latencyMs: Date.now() - start, error: error.message };
+    }
+    return { ok: true, configured: true, latencyMs: Date.now() - start };
+  } catch (err) {
+    return {
+      ok: false,
+      configured: true,
+      latencyMs: Date.now() - start,
+      error: err instanceof Error ? err.message : 'Database ping error',
+    };
+  }
 }
 
 export function createUserClient(token?: string) {
@@ -135,9 +160,9 @@ export async function getDashboardData(accessibleRepoIds?: string[]): Promise<Da
     avgReviewTimeSeconds: null,
     hasEnoughData: false,
     totalFindingsAnalyzed: 0,
-    avgCostUsd: 0,
-    p50Latency: 0,
-    p95Latency: 0,
+    avgCostUsd: null,
+    p50Latency: null,
+    p95Latency: null,
     cacheHitRate: cacheStats.hitRatePercentage,
   };
 
@@ -152,11 +177,11 @@ export async function getDashboardData(accessibleRepoIds?: string[]): Promise<Da
         toolsExecuted: 0,
         securityFindings: 0,
         avgReviewTimeSeconds: null,
-        avgCostPerReviewUsd: 0,
-        baselineCostWithoutRoutingUsd: 0,
-        adaptiveRoutingCostSavingsPercentage: 0,
-        p50LatencySeconds: 0,
-        p95LatencySeconds: 0,
+        avgCostPerReviewUsd: null,
+        baselineCostWithoutRoutingUsd: null,
+        adaptiveRoutingCostSavingsPercentage: null,
+        p50LatencySeconds: null,
+        p95LatencySeconds: null,
         osvCacheHitRatePercentage: cacheStats.hitRatePercentage,
       },
       analytics: emptyAnalytics,
@@ -209,13 +234,48 @@ export async function getDashboardData(accessibleRepoIds?: string[]): Promise<Da
 
   const p50Index = Math.floor(durationsSeconds.length * 0.5);
   const p95Index = Math.min(durationsSeconds.length - 1, Math.floor(durationsSeconds.length * 0.95));
-  const p50LatencySeconds = durationsSeconds.length > 0 ? Number(durationsSeconds[p50Index].toFixed(2)) : 0;
-  const p95LatencySeconds = durationsSeconds.length > 0 ? Number(durationsSeconds[p95Index].toFixed(2)) : 0;
+  const p50LatencySeconds = durationsSeconds.length > 0 ? Number(durationsSeconds[p50Index].toFixed(2)) : null;
+  const p95LatencySeconds = durationsSeconds.length > 0 ? Number(durationsSeconds[p95Index].toFixed(2)) : null;
 
-  // Average cost estimate across runs with adaptive routing vs baseline (Groq Llama 70B full path)
-  const baselineCostWithoutRoutingUsd = 0.000150;
-  const avgCostPerReviewUsd = realReviewRuns.length > 0 ? 0.000072 : 0;
-  const adaptiveRoutingCostSavingsPercentage = realReviewRuns.length > 0 ? 52.0 : 0;
+  // Real cost calculation across recorded runs based on model used & token telemetry
+  let avgCostPerReviewUsd: number | null = null;
+  let baselineCostWithoutRoutingUsd: number | null = null;
+  let adaptiveRoutingCostSavingsPercentage: number | null = null;
+
+  if (realReviewRuns.length > 0) {
+    const costs: number[] = [];
+    const baselines: number[] = [];
+
+    for (const run of realReviewRuns) {
+      const synthesisStep = Array.isArray(run.agent_trace)
+        ? run.agent_trace.find((s) => s.tool === 'synthesizeReview')
+        : undefined;
+
+      const runCost = typeof synthesisStep?.output?.estimatedCostUsd === 'number'
+        ? synthesisStep.output.estimatedCostUsd
+        : run.provider_used?.toLowerCase().includes('deterministic')
+        ? 0
+        : calculateModelCost(run.provider_used || 'Groq Llama 3.3 70B', 1500, 400);
+
+      const baseline = calculateModelCost('llama-3.3-70b-versatile', 1500, 400);
+
+      costs.push(runCost);
+      baselines.push(baseline);
+    }
+
+    const totalActual = costs.reduce((sum, c) => sum + c, 0);
+    const totalBaseline = baselines.reduce((sum, b) => sum + b, 0);
+
+    avgCostPerReviewUsd = Number((totalActual / costs.length).toFixed(6));
+    baselineCostWithoutRoutingUsd = Number((totalBaseline / baselines.length).toFixed(6));
+
+    if (totalBaseline > 0) {
+      const savings = ((totalBaseline - totalActual) / totalBaseline) * 100;
+      adaptiveRoutingCostSavingsPercentage = Number(Math.max(0, savings).toFixed(1));
+    } else {
+      adaptiveRoutingCostSavingsPercentage = 0;
+    }
+  }
 
   // 2. Build Timeline (Findings per review run over last 30 days)
   const timelineMap = new Map<string, { critical: number; warning: number; info: number; total: number; date: string }>();
