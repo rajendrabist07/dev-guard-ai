@@ -1,3 +1,5 @@
+import { MODELS, calculateModelCost } from '@/lib/config/models';
+
 export type DiffComplexity = 'trivial' | 'standard' | 'complex';
 
 export interface ComplexityAnalysis {
@@ -21,9 +23,9 @@ export interface ComplexityAnalysis {
  * 1. Trivial: Docs-only (.md, .txt), markdown changes, single-line CSS/config edits with zero logic.
  *    -> Route: Deterministic Fast Engine (Cost: $0.000000, 100% reduction)
  * 2. Standard: Small UI components, utility helpers (< 40 lines changed, no auth/db/manifests).
- *    -> Route: Gemini 2.5 Flash Efficient Tier (Cost: ~$0.000035, ~75% reduction)
+ *    -> Route: Gemini 2.0 Flash Efficient Tier (Cost: ~$0.000035, ~75% reduction)
  * 3. Complex: Database schemas, auth routes, payment endpoints, package manifests, or diffs > 40 lines.
- *    -> Route: Full Groq Llama 3.3 70B Orchestrator (Cost: ~$0.000150, 0% baseline)
+ *    -> Route: Full Groq Llama 3.3 70B Orchestrator (Full baseline cost)
  */
 export function classifyDiffComplexity(diff: string, fileNames: string[] = []): ComplexityAnalysis {
   const lines = diff.split('\n');
@@ -47,8 +49,10 @@ export function classifyDiffComplexity(diff: string, fileNames: string[] = []): 
 
   const isCodeOrRouteFile = fileNames.some((f) => /\.(ts|tsx|js|jsx|py|go|rs|sql|mjs|cjs)$/i.test(f) || f.includes('app/api') || f.includes('routes'));
 
-  // Default baseline cost if every request used the largest model path (Groq Llama 3.3 70B)
-  const baselineCost = 0.000150;
+  // Baseline cost if every request used the full primary model (Groq Llama 3.3 70B, ~1500 in / ~400 out tokens)
+  const baselineCost = calculateModelCost(MODELS.GROQ_LLAMA_70B.id, 1500, 400);
+  const flashCost = calculateModelCost(MODELS.GEMINI_FLASH.id, 1500, 400);
+  const flashSavings = Number((((baselineCost - flashCost) / baselineCost) * 100).toFixed(1));
 
   if (isDocsOnly || (!isCodeOrRouteFile && totalLinesChanged <= 3 && !isSecuritySensitive && !isSchemaOrManifest)) {
     return {
@@ -94,7 +98,7 @@ export function classifyDiffComplexity(diff: string, fileNames: string[] = []): 
     hasSchemaOrManifestChanges: false,
     recommendedModelTier: 'gemini_flash_efficient',
     estimatedCostWithoutRoutingUsd: baselineCost,
-    estimatedCostWithRoutingUsd: 0.000035,
-    costSavingsPercentage: 76.7,
+    estimatedCostWithRoutingUsd: flashCost,
+    costSavingsPercentage: flashSavings,
   };
 }

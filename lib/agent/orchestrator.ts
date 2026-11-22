@@ -87,7 +87,7 @@ function shouldRunTests(diff: string, fileNames: string[] = []): boolean {
  * 2. **Hard 5-Iteration Cap (`MAX_ITERATIONS = 5`)**: Caps tool execution steps to 5 iterations maximum to
  *    prevent infinite loops or unbounded cloud compute usage.
  * 3. **Multi-Tier LLM Fallback**: Synthesis attempts primary Groq Llama 3.3 70B, gracefully falling back to
- *    Gemini 2.5 Flash on HTTP 429 rate limits, and finally a deterministic rule-based engine if offline.
+ *    Gemini 2.0 Flash on HTTP 429 rate limits, and finally a deterministic rule-based engine if offline.
  * 
  * @param prDiff - Unified git diff content of the pull request or snippet
  * @param fileNames - List of file paths modified within the diff

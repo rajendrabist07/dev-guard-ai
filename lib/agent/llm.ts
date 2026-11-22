@@ -2,6 +2,10 @@ import { z } from 'zod';
 import Groq from 'groq-sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { logger } from '@/lib/observability/logger';
+import {
+  MODELS,
+  calculateModelCost,
+} from '@/lib/config/models';
 
 export const LLMOutputSchema = z.object({
   summary: z.string().min(10, 'Summary must be at least 10 characters long'),
@@ -31,7 +35,7 @@ export interface LLMTelemetry {
 
 export interface LLMSynthesisResult {
   summary: string;
-  provider: 'Groq Llama 3.3 70B' | 'Gemini 2.5 Flash' | 'Deterministic Engine (Fallback)';
+  provider: 'Groq Llama 3.3 70B' | 'Gemini 2.0 Flash' | 'Deterministic Engine (Fallback)';
   model: string;
   fallbackTriggered: boolean;
   fallbackReason?: string;
@@ -42,22 +46,10 @@ export interface LLMSynthesisResult {
 }
 
 /**
- * Calculates estimated cost based on standard published pricing:
- * - Groq Llama 3.3 70B: $0.59 / 1M prompt tokens, $0.79 / 1M completion tokens
- * - Gemini 2.5 Flash: $0.075 / 1M prompt tokens, $0.30 / 1M completion tokens
+ * Calculates estimated cost based on standard published pricing via lib/config/models.ts.
  */
 export function calculateEstimatedCost(provider: string, inputTokens: number, outputTokens: number): number {
-  if (provider.includes('Groq') || provider.includes('Llama')) {
-    const inputCost = (inputTokens / 1_000_000) * 0.59;
-    const outputCost = (outputTokens / 1_000_000) * 0.79;
-    return Number((inputCost + outputCost).toFixed(6));
-  }
-  if (provider.includes('Gemini') || provider.includes('Flash')) {
-    const inputCost = (inputTokens / 1_000_000) * 0.075;
-    const outputCost = (outputTokens / 1_000_000) * 0.30;
-    return Number((inputCost + outputCost).toFixed(6));
-  }
-  return 0; // Deterministic engine has 0 compute API cost
+  return calculateModelCost(provider, inputTokens, outputTokens);
 }
 
 export function estimateTokens(text: string): number {
@@ -275,9 +267,9 @@ Provide a concise 3-4 bullet executive summary of the review findings and action
       const isRateLimit = String(groqErr).includes('429') || String(groqErr).toLowerCase().includes('rate');
       const isTimeout = String(groqErr).toLowerCase().includes('timed out');
       const reason = isRateLimit
-        ? 'Groq rate limit exceeded (HTTP 429) — switched to Gemini 2.5 Flash'
+        ? `Groq rate limit exceeded (HTTP 429) — switched to ${MODELS.GEMINI_FLASH.displayName}`
         : isTimeout
-        ? 'Groq request timed out (10s limit) — switched to Gemini 2.5 Flash'
+        ? `Groq request timed out (10s limit) — switched to ${MODELS.GEMINI_FLASH.displayName}`
         : `Groq request error: ${groqErr instanceof Error ? groqErr.message : 'service unreachable'}`;
 
       logger.warn(reason, {
@@ -291,7 +283,7 @@ Provide a concise 3-4 bullet executive summary of the review findings and action
       if (geminiKey && !geminiKey.includes('your_gemini_api_key')) {
         try {
           const genAI = new GoogleGenerativeAI(geminiKey);
-          const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+          const model = genAI.getGenerativeModel({ model: MODELS.GEMINI_FLASH.id });
           const res = await withTimeout(
             model.generateContent(prompt),
             10000,
@@ -303,7 +295,7 @@ Provide a concise 3-4 bullet executive summary of the review findings and action
           if (geminiValidation.success) {
             const inTokens = res.response.usageMetadata?.promptTokenCount ?? inputTokenEstimate;
             const outTokens = res.response.usageMetadata?.candidatesTokenCount ?? estimateTokens(geminiSummary);
-            const costUsd = calculateEstimatedCost('Gemini 2.5 Flash', inTokens, outTokens);
+            const costUsd = calculateEstimatedCost(MODELS.GEMINI_FLASH.id, inTokens, outTokens);
             const latencyMs = Date.now() - startTime;
 
             let finalSummary = geminiValidation.data.summary;
@@ -322,8 +314,8 @@ Provide a concise 3-4 bullet executive summary of the review findings and action
 
             return {
               summary: finalSummary,
-              provider: 'Gemini 2.5 Flash',
-              model: 'gemini-2.0-flash',
+              provider: MODELS.GEMINI_FLASH.providerLabel,
+              model: MODELS.GEMINI_FLASH.id,
               fallbackTriggered: true,
               fallbackReason: reason,
               latencyMs,
@@ -351,7 +343,7 @@ Provide a concise 3-4 bullet executive summary of the review findings and action
   if (geminiKey && !geminiKey.includes('your_gemini_api_key')) {
     try {
       const genAI = new GoogleGenerativeAI(geminiKey);
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+      const model = genAI.getGenerativeModel({ model: MODELS.GEMINI_FLASH.id });
       const res = await withTimeout(
         model.generateContent(prompt),
         10000,
@@ -363,7 +355,7 @@ Provide a concise 3-4 bullet executive summary of the review findings and action
       if (geminiValidation.success) {
         const inTokens = res.response.usageMetadata?.promptTokenCount ?? inputTokenEstimate;
         const outTokens = res.response.usageMetadata?.candidatesTokenCount ?? estimateTokens(geminiSummary);
-        const costUsd = calculateEstimatedCost('Gemini 2.5 Flash', inTokens, outTokens);
+        const costUsd = calculateEstimatedCost(MODELS.GEMINI_FLASH.id, inTokens, outTokens);
         const latencyMs = Date.now() - startTime;
 
         let finalSummary = geminiValidation.data.summary;
@@ -382,8 +374,8 @@ Provide a concise 3-4 bullet executive summary of the review findings and action
 
         return {
           summary: finalSummary,
-          provider: 'Gemini 2.5 Flash',
-          model: 'gemini-2.0-flash',
+          provider: MODELS.GEMINI_FLASH.providerLabel,
+          model: MODELS.GEMINI_FLASH.id,
           fallbackTriggered: false,
           latencyMs,
           suspiciousMismatch,

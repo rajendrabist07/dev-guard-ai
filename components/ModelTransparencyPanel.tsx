@@ -96,7 +96,7 @@ export default function ModelTransparencyPanel({
               <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
               <div>
                 <span className="font-bold text-amber-300">Groq Rate-Limit Handled: </span>
-                <span>{fallbackReason} — synthesis completed automatically via Gemini 2.5 Flash without review downtime.</span>
+                <span>{fallbackReason} — synthesis completed automatically via Gemini 2.0 Flash without review downtime.</span>
               </div>
             </div>
           )}
