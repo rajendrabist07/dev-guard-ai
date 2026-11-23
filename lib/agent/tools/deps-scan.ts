@@ -292,22 +292,51 @@ async function queryOsvBatch(
         const mapKey = `${dep.name}:${dep.version}`;
 
         if (resItem?.vulns && resItem.vulns.length > 0) {
+          const curatedList = OFFLINE_KNOWN_VULNERABILITIES[mapKey] || [];
+          const curatedMap = new Map<string, VulnerabilityResult>(
+            curatedList.map((c) => [c.vulnerabilityId, c])
+          );
+
           const vulns: VulnerabilityResult[] = resItem.vulns.map((v) => {
-            const rawSummary = v.summary || v.details || `Security vulnerability reported for ${dep.name}@${dep.version}`;
+            const vulnId = v.id || 'GHSA-UNKNOWN';
+            const curated = curatedMap.get(vulnId);
+
+            const rawSummary =
+              curated?.summary ||
+              v.summary ||
+              v.details ||
+              `Security vulnerability reported for ${dep.name}@${dep.version}`;
+
             const isCritical =
+              curated?.severity === 'critical' ||
               /\bcritical\b|remote code execution|\brce\b|arbitrary code execution|\bssrf\b/i.test(rawSummary) ||
               v.database_specific?.severity?.toLowerCase() === 'critical';
+
+            const recommended =
+              curated?.recommendedVersion ||
+              extractRecommendedFix(v) ||
+              (curatedList.length > 0 ? curatedList[0].recommendedVersion : undefined);
 
             return {
               package: dep.name,
               version: dep.version,
-              vulnerabilityId: v.id || 'GHSA-UNKNOWN',
+              vulnerabilityId: vulnId,
               summary: rawSummary,
               severity: (isCritical ? 'critical' : 'warning') as Severity,
-              recommendedVersion: extractRecommendedFix(v),
+              recommendedVersion: recommended,
               dependencyPath: dep.dependencyPath,
               isPreExisting: !dep.isPrChange,
             };
+          });
+
+          // Prioritize curated vulnerabilities and critical severity
+          vulns.sort((a, b) => {
+            const aCurated = curatedMap.has(a.vulnerabilityId) ? 1 : 0;
+            const bCurated = curatedMap.has(b.vulnerabilityId) ? 1 : 0;
+            if (aCurated !== bCurated) return bCurated - aCurated;
+            if (a.severity === 'critical' && b.severity !== 'critical') return -1;
+            if (b.severity === 'critical' && a.severity !== 'critical') return 1;
+            return 0;
           });
 
           resultsMap.set(mapKey, vulns);
