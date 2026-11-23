@@ -28,6 +28,8 @@ export async function middleware(req: NextRequest) {
     pathname.startsWith('/api/try') ||
     pathname.startsWith('/api/badge') ||
     pathname === '/api/webhooks/github' ||
+    pathname.startsWith('/api/jobs/') ||
+    pathname.startsWith('/api/cron/') ||
     pathname === '/api/health' ||
     pathname.startsWith('/_next') ||
     pathname === '/favicon.ico';

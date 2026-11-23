@@ -1,127 +1,21 @@
-import { NextRequest, NextResponse, after } from 'next/server';
-import {
-  fetchPullRequestDiff,
-  getOctokitClient,
-  postGitHubReviewComment,
-  verifyGitHubWebhook,
-} from '@/lib/github/client';
+import { NextRequest, NextResponse } from 'next/server';
+import { verifyGitHubWebhook } from '@/lib/github/client';
 import {
   createReviewRunOnConflictDoNothing,
   ensureRepoForInstallation,
   recordWebhookDelivery,
-  saveFindings,
-  updateReviewRun,
 } from '@/lib/db/supabase';
-import { runAgentOrchestrator } from '@/lib/agent/orchestrator';
+import { enqueueReviewJob } from '@/lib/queue/qstash';
 import { logger } from '@/lib/observability/logger';
+import { extractCorrelationId } from '@/lib/resilience/fetch-with-retry';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const MAX_WEBHOOK_PAYLOAD_BYTES = 5 * 1024 * 1024; // 5MB payload limit
 
-/**
- * Executes the full agentic review pipeline in a non-blocking background context.
- * Features a 2-minute safety watchdog timeout to prevent orphaned 'running' states.
- */
-async function processReviewInBackground(params: {
-  installationId: number;
-  storedRepoId: string;
-  repoFullName: string;
-  prNumber: number;
-  commitSha: string;
-  prTitle: string;
-  prAuthor: string;
-  reviewRunId: string;
-  startTime: number;
-}) {
-  const {
-    installationId,
-    repoFullName,
-    prNumber,
-    commitSha,
-    reviewRunId,
-    startTime,
-  } = params;
-
-  // Safeguard: 2-minute timeout watchdog
-  const watchdogTimer = setTimeout(async () => {
-    try {
-      await updateReviewRun(reviewRunId, {
-        status: 'failed',
-        completed_at: new Date().toISOString(),
-        error_message: 'Execution timed out after 120 seconds.',
-      });
-      logger.error('Review execution watchdog triggered — marked as failed', {
-        module: 'webhook-handler',
-        action: 'watchdog-timeout',
-        reviewRunId,
-      });
-    } catch {
-      // Ignore fallback cleanup errors
-    }
-  }, 120_000);
-
-  try {
-    const octokit = await getOctokitClient(installationId);
-    const [owner = '', repoName = ''] = repoFullName.split('/');
-    if (!owner || !repoName) return;
-
-    // 1. Fetch live PR diff & file list
-    const { diff, files } = await fetchPullRequestDiff(octokit, owner, repoName, prNumber);
-
-    // 2. Run Agentic Multi-Tool Orchestrator
-    const result = await runAgentOrchestrator(diff, files, reviewRunId);
-
-    // 3. Post review comment with diff-hunk line validation to prevent 422 errors
-    await postGitHubReviewComment(
-      octokit,
-      owner,
-      repoName,
-      prNumber,
-      commitSha,
-      result.findings,
-      result.summary,
-      diff
-    );
-
-    // 4. Save findings & update review run in Supabase
-    await saveFindings(result.findings);
-    await updateReviewRun(reviewRunId, {
-      status: 'completed',
-      tool_calls_count: result.toolCallsCount,
-      agent_trace: result.trace,
-      completed_at: new Date().toISOString(),
-      error_message: null,
-    });
-
-    clearTimeout(watchdogTimer);
-
-    logger.info('Autonomous PR review completed successfully in background', {
-      module: 'webhook-handler',
-      action: 'review-completed',
-      reviewRunId,
-      findingsCount: result.findings.length,
-      durationMs: Date.now() - startTime,
-    });
-  } catch (err: unknown) {
-    clearTimeout(watchdogTimer);
-    const message = err instanceof Error ? err.message : 'Review processing failed.';
-    await updateReviewRun(reviewRunId, {
-      status: 'failed',
-      completed_at: new Date().toISOString(),
-      error_message: message,
-    });
-    logger.error('PR review background execution failed', err, {
-      module: 'webhook-handler',
-      action: 'agent-orchestration',
-      reviewRunId,
-    });
-  }
-}
-
 export async function POST(req: NextRequest) {
-  const startTime = Date.now();
+  const correlationId = extractCorrelationId(req.headers);
 
   try {
     const rawBody = await req.text();
@@ -132,6 +26,7 @@ export async function POST(req: NextRequest) {
         module: 'webhook-handler',
         action: 'check-payload-size',
         size: Buffer.byteLength(rawBody, 'utf8'),
+        correlationId,
       });
       return NextResponse.json({ error: 'Payload too large (max 5MB)' }, { status: 413 });
     }
@@ -146,6 +41,7 @@ export async function POST(req: NextRequest) {
         module: 'webhook-handler',
         action: 'verify-signature',
         eventType,
+        correlationId,
       });
       return NextResponse.json({ error: 'Missing x-hub-signature-256 header' }, { status: 401 });
     }
@@ -157,6 +53,7 @@ export async function POST(req: NextRequest) {
         module: 'webhook-handler',
         action: 'verify-signature',
         eventType,
+        correlationId,
       });
       return NextResponse.json({ error: 'Invalid webhook signature' }, { status: 401 });
     }
@@ -167,6 +64,7 @@ export async function POST(req: NextRequest) {
         module: 'webhook-handler',
         action: 'verify-delivery',
         eventType,
+        correlationId,
       });
       return NextResponse.json({ error: 'Missing x-github-delivery header' }, { status: 400 });
     }
@@ -178,6 +76,7 @@ export async function POST(req: NextRequest) {
         module: 'webhook-handler',
         action: 'replay-dedupe',
         deliveryId,
+        correlationId,
       });
       return NextResponse.json(
         { message: 'Duplicate webhook delivery ignored (replay prevention)' },
@@ -191,6 +90,7 @@ export async function POST(req: NextRequest) {
         module: 'webhook-handler',
         action: 'unsupported-event',
         eventType,
+        correlationId,
       });
       return NextResponse.json({ message: `Event ${eventType} ignored` }, { status: 202 });
     }
@@ -216,6 +116,7 @@ export async function POST(req: NextRequest) {
         module: 'webhook-handler',
         action: 'unsupported-action',
         actionName: action,
+        correlationId,
       });
       return NextResponse.json({ message: `Pull request action ${action || 'none'} ignored` }, { status: 202 });
     }
@@ -227,6 +128,7 @@ export async function POST(req: NextRequest) {
       logger.warn('Malformed pull_request event payload received', {
         module: 'webhook-handler',
         action: 'parse-payload',
+        correlationId,
       });
       return NextResponse.json({ message: 'Malformed pull_request event ignored' }, { status: 200 });
     }
@@ -243,6 +145,7 @@ export async function POST(req: NextRequest) {
         module: 'webhook-handler',
         repoFullName,
         prNumber,
+        correlationId,
       });
       return NextResponse.json({ message: 'Missing GitHub installation id' }, { status: 200 });
     }
@@ -253,14 +156,15 @@ export async function POST(req: NextRequest) {
       fullName: repoFullName,
     });
 
-    // 6. Idempotent Review Run Creation (ON CONFLICT DO NOTHING)
+    // 6. Idempotent Review Run Creation (status = 'queued', ON CONFLICT DO NOTHING)
     const { created, reviewRun } = await createReviewRunOnConflictDoNothing({
       repo_id: storedRepo.id,
       pr_number: prNumber,
       pr_title: prTitle,
       pr_author: prAuthor,
       commit_sha: commitSha,
-      status: 'running',
+      status: 'queued',
+      correlation_id: correlationId,
     });
 
     if (!created) {
@@ -271,6 +175,7 @@ export async function POST(req: NextRequest) {
         prNumber,
         commitSha: commitSha.substring(0, 7),
         existingRunId: reviewRun.id,
+        correlationId,
       });
       return NextResponse.json(
         {
@@ -282,33 +187,23 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 7. Trigger Asynchronous Background Orchestration
-    const runBackgroundJob = () => {
-      processReviewInBackground({
-        installationId,
-        storedRepoId: storedRepo.id,
-        repoFullName,
-        prNumber,
-        commitSha,
-        prTitle,
-        prAuthor,
-        reviewRunId: reviewRun.id,
-        startTime,
-      }).catch((err) => {
-        logger.error('Background review task uncaught error', err);
-      });
-    };
-
-    try {
-      after(runBackgroundJob);
-    } catch {
-      queueMicrotask(runBackgroundJob);
-    }
+    // 7. Enqueue Review Run via Durable Queue (Upstash QStash)
+    await enqueueReviewJob({
+      reviewRunId: reviewRun.id,
+      installationId,
+      repoFullName,
+      prNumber,
+      commitSha,
+      prTitle,
+      prAuthor,
+      correlationId,
+      attempt: 1,
+    });
 
     return NextResponse.json(
       {
         status: 'accepted',
-        message: 'Webhook received and autonomous review scheduled.',
+        message: 'Webhook received and review job enqueued.',
         reviewRunId: reviewRun.id,
       },
       { status: 202 }
@@ -317,6 +212,7 @@ export async function POST(req: NextRequest) {
     logger.error('Unhandled exception in GitHub webhook handler', err, {
       module: 'webhook-handler',
       action: 'process-request',
+      correlationId,
     });
     const message = err instanceof Error ? err.message : 'Internal Server Error';
     return NextResponse.json({ error: message }, { status: 500 });

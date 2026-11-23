@@ -1,5 +1,9 @@
 import { Severity } from '../../db/types';
 import { getCachedValue, setCachedValue } from '@/lib/cache/redis';
+import { resolveExactDependencies } from './lockfile-parser';
+import { osvCircuitBreaker } from '@/lib/resilience/circuit-breaker';
+import { fetchWithRetry } from '@/lib/resilience/fetch-with-retry';
+import { logger } from '@/lib/observability/logger';
 
 export type OsvVulnerability = VulnerabilityResult;
 
@@ -10,6 +14,8 @@ export interface VulnerabilityResult {
   summary: string;
   severity: Severity;
   recommendedVersion?: string;
+  dependencyPath?: string[];
+  isPreExisting?: boolean;
 }
 
 export interface DepsScanToolOutput {
@@ -17,6 +23,7 @@ export interface DepsScanToolOutput {
   totalDependenciesScanned: number;
   vulnerabilities: VulnerabilityResult[];
   summary: string;
+  exactVersionsResolvedFromLockfile?: boolean;
 }
 
 interface OsvAffectedRange {
@@ -29,16 +36,21 @@ interface OsvAffected {
   ranges?: OsvAffectedRange[];
 }
 
-interface OsvQueryResponse {
-  vulns?: Array<{
-    id?: string;
-    summary?: string;
-    details?: string;
-    affected?: OsvAffected[];
-    database_specific?: {
-      severity?: string;
-    };
+interface OsvVulnItem {
+  id?: string;
+  summary?: string;
+  details?: string;
+  affected?: OsvAffected[];
+  database_specific?: {
+    severity?: string;
+  };
+}
+
+interface OsvBatchResponse {
+  results?: Array<{
+    vulns?: OsvVulnItem[];
   }>;
+  vulns?: OsvVulnItem[]; // Backwards-compatible fallback for mock endpoints
 }
 
 // Built-in fallback database for sandbox/offline resilience and deterministic eval baselines
@@ -101,11 +113,29 @@ const NON_DEPENDENCY_KEYS = new Set([
   'private', 'type', '$schema', 'workspaces', 'engines',
 ]);
 
+// Official npm package name regex for SSRF and injection prevention
+export const NPM_PACKAGE_NAME_REGEX = /^(?:@[a-z0-9-*~][a-z0-9-*._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/i;
+
+// Hardcoded allowlist of permitted outbound API hosts
+export const ALLOWED_OUTBOUND_HOSTS = new Set([
+  'api.osv.dev',
+  'api.github.com',
+  'api.groq.com',
+  'generativelanguage.googleapis.com',
+  'qstash.upstash.io',
+]);
+
+export interface ExtractedDependency {
+  name: string;
+  version: string;
+  isPrChange: boolean;
+}
+
 /**
  * Parses dependencies dynamically from a JSON manifest string or a git diff snippet.
  */
-export function extractDependencies(content: string): Array<{ name: string; version: string }> {
-  const depsMap = new Map<string, string>();
+export function extractDependencies(content: string): ExtractedDependency[] {
+  const depsMap = new Map<string, ExtractedDependency>();
   const trimmed = content.trim();
 
   // Strategy 1: Attempt JSON parsing if the content is a full package.json structure
@@ -123,44 +153,41 @@ export function extractDependencies(content: string): Array<{ name: string; vers
         if (section && typeof section === 'object') {
           for (const [pkgName, rawVer] of Object.entries(section)) {
             if (typeof rawVer === 'string' && !NON_DEPENDENCY_KEYS.has(pkgName)) {
-              const cleanVer = cleanVersionString(rawVer);
-              depsMap.set(pkgName, cleanVer);
+              depsMap.set(pkgName, {
+                name: pkgName,
+                version: rawVer.trim(),
+                isPrChange: true,
+              });
             }
           }
         }
       }
     } catch {
-      // JSON parse failed (e.g. truncated or git diff with curly braces) — continue to regex strategy
+      // Continue to diff regex strategy
     }
   }
 
   // Strategy 2: Regex extraction from git diff hunks or partial JSON snippets
-  const lineRegex = /(?:^\+|\s+)["'](@?[a-zA-Z0-9_\-\.\/]+)["']\s*:\s*["']([^"']+)["']/gm;
+  const lineRegex = /(?:^|\n)\s*(\+)?\s*["'](@?[a-zA-Z0-9_\-\.\/]+)["']\s*:\s*["']([^"']+)["']/gm;
   let match: RegExpExecArray | null;
 
   while ((match = lineRegex.exec(content)) !== null) {
-    const pkgName = match[1].trim();
-    const rawVer = match[2].trim();
+    const isAddedOrChanged = match[1] === '+';
+    const pkgName = match[2].trim();
+    const rawVer = match[3].trim();
 
     if (!NON_DEPENDENCY_KEYS.has(pkgName) && !rawVer.startsWith('http') && !rawVer.startsWith('git')) {
-      const cleanVer = cleanVersionString(rawVer);
-      if (cleanVer && !depsMap.has(pkgName)) {
-        depsMap.set(pkgName, cleanVer);
+      if (!depsMap.has(pkgName) || isAddedOrChanged) {
+        depsMap.set(pkgName, {
+          name: pkgName,
+          version: rawVer,
+          isPrChange: isAddedOrChanged,
+        });
       }
     }
   }
 
-  return Array.from(depsMap.entries()).map(([name, version]) => ({ name, version }));
-}
-
-function cleanVersionString(raw: string): string {
-  // Remove semver prefix symbols: ^, ~, >=, <=, >, <, =, v, npm:package@
-  let cleaned = raw.trim();
-  cleaned = cleaned.replace(/^npm:[^@]+@/, '');
-  cleaned = cleaned.replace(/^[\^~><=\sv]+/, '');
-  // Match standard semver or major.minor
-  const semverMatch = cleaned.match(/^\d+(\.\d+)?(\.\d+)?([a-zA-Z0-9\.\-_]*)/);
-  return semverMatch ? semverMatch[0] : cleaned;
+  return Array.from(depsMap.values());
 }
 
 function extractRecommendedFix(vuln: { affected?: OsvAffected[] }): string | undefined {
@@ -181,110 +208,165 @@ function extractRecommendedFix(vuln: { affected?: OsvAffected[] }): string | und
   return undefined;
 }
 
-// Official npm package name regex for SSRF and injection prevention
-export const NPM_PACKAGE_NAME_REGEX = /^(?:@[a-z0-9-*~][a-z0-9-*._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/i;
-
-// Hardcoded allowlist of permitted outbound API hosts
-export const ALLOWED_OUTBOUND_HOSTS = new Set([
-  'api.osv.dev',
-  'api.github.com',
-  'api.groq.com',
-  'generativelanguage.googleapis.com',
-]);
-
 /**
- * Dynamically queries the OSV.dev database with multi-tier Redis caching.
- * Validates package names to prevent SSRF or cache poisoning.
+ * Builds a validated, injection-safe Redis cache key for an npm package version.
  */
-async function queryOsvForDependency(pkgName: string, version: string): Promise<VulnerabilityResult[]> {
-  // Reject invalid package names immediately
-  if (!NPM_PACKAGE_NAME_REGEX.test(pkgName)) {
-    return [];
-  }
-
-  const cacheKey = `osv:npm:${pkgName}:${version}`;
-
-  try {
-    const cached = await getCachedValue<VulnerabilityResult[]>(cacheKey);
-    if (cached !== null) {
-      return cached;
-    }
-  } catch {
-    // Cache read failed, proceed to fetch
-  }
-
-  const targetUrl = 'https://api.osv.dev/v1/query';
-  const urlObj = new URL(targetUrl);
-  if (!ALLOWED_OUTBOUND_HOSTS.has(urlObj.hostname)) {
-    throw new Error(`SSRF Prevention: Outbound request to ${urlObj.hostname} is forbidden.`);
-  }
-
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 3000);
-    const res = await fetch(targetUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      signal: controller.signal,
-      body: JSON.stringify({
-        package: { name: pkgName, ecosystem: 'npm' },
-        version,
-      }),
-    });
-    clearTimeout(timer);
-
-    if (res.ok) {
-      const data = (await res.json()) as OsvQueryResponse;
-      if (data.vulns && data.vulns.length > 0) {
-        const mappedResults: VulnerabilityResult[] = data.vulns.map((v) => {
-          const rawSummary = v.summary || v.details || `Security vulnerability reported for ${pkgName}@${version}`;
-          const isCritical =
-            /\bcritical\b|remote code execution|\brce\b|arbitrary code execution|\bssrf\b/i.test(rawSummary) ||
-            v.database_specific?.severity?.toLowerCase() === 'critical';
-
-          return {
-            package: pkgName,
-            version,
-            vulnerabilityId: v.id || 'GHSA-UNKNOWN',
-            summary: rawSummary,
-            severity: (isCritical ? 'critical' : 'warning') as Severity,
-            recommendedVersion: extractRecommendedFix(v),
-          };
-        });
-
-        await setCachedValue(cacheKey, mappedResults, 86400);
-        return mappedResults;
-      } else {
-        // No vulnerabilities found in OSV.dev
-        await setCachedValue(cacheKey, [], 86400);
-        return [];
-      }
-    }
-  } catch {
-    // Network unreachable, timeout, or sandboxed execution — check offline fallback
-    const offlineKey = `${pkgName}:${version}`;
-    const fallbackResults = OFFLINE_KNOWN_VULNERABILITIES[offlineKey] || [];
-    await setCachedValue(cacheKey, fallbackResults, 86400);
-    return fallbackResults;
-  }
-
-  // Fallback if status not ok
-  const offlineKey = `${pkgName}:${version}`;
-  const fallbackResults = OFFLINE_KNOWN_VULNERABILITIES[offlineKey] || [];
-  await setCachedValue(cacheKey, fallbackResults, 86400);
-  return fallbackResults;
+function buildCacheKey(pkgName: string, version: string): string {
+  const safePkg = encodeURIComponent(pkgName);
+  const safeVer = encodeURIComponent(version);
+  return `osv:npm:${safePkg}:${safeVer}`;
 }
 
-export async function scanDependencies(manifestContent?: string): Promise<DepsScanToolOutput> {
-  const vulnerabilities: VulnerabilityResult[] = [];
-  const content = manifestContent || '';
+const OSV_BATCH_CHUNK_SIZE = 50;
 
+/**
+ * Executes a chunked OSV `/v1/querybatch` request with circuit breaker, retries, and caching.
+ */
+async function queryOsvBatch(
+  dependencies: Array<{ name: string; version: string; isPrChange: boolean; dependencyPath?: string[] }>
+): Promise<Map<string, VulnerabilityResult[]>> {
+  const resultsMap = new Map<string, VulnerabilityResult[]>();
+  const toFetch: Array<{ name: string; version: string; isPrChange: boolean; dependencyPath?: string[] }> = [];
+
+  // 1. Check Redis cache for each dependency
+  for (const dep of dependencies) {
+    if (!NPM_PACKAGE_NAME_REGEX.test(dep.name)) {
+      resultsMap.set(`${dep.name}:${dep.version}`, []);
+      continue;
+    }
+
+    const cacheKey = buildCacheKey(dep.name, dep.version);
+    try {
+      const cached = await getCachedValue<VulnerabilityResult[]>(cacheKey);
+      if (cached !== null) {
+        resultsMap.set(`${dep.name}:${dep.version}`, cached);
+        continue;
+      }
+    } catch {
+      // Proceed to fetch
+    }
+
+    toFetch.push(dep);
+  }
+
+  if (toFetch.length === 0) {
+    return resultsMap;
+  }
+
+  // 2. Query OSV.dev in chunks of 50
+  for (let i = 0; i < toFetch.length; i += OSV_BATCH_CHUNK_SIZE) {
+    const chunk = toFetch.slice(i, i + OSV_BATCH_CHUNK_SIZE);
+    const targetUrl = 'https://api.osv.dev/v1/querybatch';
+
+    try {
+      const batchResponse = await osvCircuitBreaker.execute(async () => {
+        const queries = chunk.map((c) => ({
+          package: { name: c.name, ecosystem: 'npm' },
+          version: c.version,
+        }));
+
+        const res = await fetchWithRetry(
+          targetUrl,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ queries }),
+          },
+          { maxRetries: 2, timeoutMs: 5000, moduleName: 'osv-batch-scanner' }
+        );
+
+        if (!res.ok) {
+          throw new Error(`OSV.dev batch API returned HTTP ${res.status}`);
+        }
+
+        return (await res.json()) as OsvBatchResponse;
+      });
+
+      const batchResults =
+        batchResponse.results || (batchResponse.vulns ? [{ vulns: batchResponse.vulns }] : []);
+
+      for (let j = 0; j < chunk.length; j++) {
+        const dep = chunk[j];
+        const resItem = batchResults[j];
+        const cacheKey = buildCacheKey(dep.name, dep.version);
+        const mapKey = `${dep.name}:${dep.version}`;
+
+        if (resItem?.vulns && resItem.vulns.length > 0) {
+          const vulns: VulnerabilityResult[] = resItem.vulns.map((v) => {
+            const rawSummary = v.summary || v.details || `Security vulnerability reported for ${dep.name}@${dep.version}`;
+            const isCritical =
+              /\bcritical\b|remote code execution|\brce\b|arbitrary code execution|\bssrf\b/i.test(rawSummary) ||
+              v.database_specific?.severity?.toLowerCase() === 'critical';
+
+            return {
+              package: dep.name,
+              version: dep.version,
+              vulnerabilityId: v.id || 'GHSA-UNKNOWN',
+              summary: rawSummary,
+              severity: (isCritical ? 'critical' : 'warning') as Severity,
+              recommendedVersion: extractRecommendedFix(v),
+              dependencyPath: dep.dependencyPath,
+              isPreExisting: !dep.isPrChange,
+            };
+          });
+
+          resultsMap.set(mapKey, vulns);
+          // Positive cache TTL: 24 hours (86400s)
+          await setCachedValue(cacheKey, vulns, 86400).catch(() => {});
+        } else {
+          // Negative result: No vulnerabilities
+          resultsMap.set(mapKey, []);
+          // Negative cache TTL: 1 hour (3600s)
+          await setCachedValue(cacheKey, [], 3600).catch(() => {});
+        }
+      }
+    } catch (err: unknown) {
+      logger.warn('OSV.dev batch query unreachable; engaging offline known-vulnerability fallback', {
+        module: 'deps-scan',
+        error: err instanceof Error ? err.message : String(err),
+      });
+
+      // Sandbox / Offline fallback for the current chunk
+      for (const dep of chunk) {
+        const mapKey = `${dep.name}:${dep.version}`;
+        const offlineKey = `${dep.name}:${dep.version}`;
+        const fallbackResults = (OFFLINE_KNOWN_VULNERABILITIES[offlineKey] || []).map((v) => ({
+          ...v,
+          dependencyPath: dep.dependencyPath,
+          isPreExisting: !dep.isPrChange,
+        }));
+
+        resultsMap.set(mapKey, fallbackResults);
+        await setCachedValue(buildCacheKey(dep.name, dep.version), fallbackResults, 86400).catch(() => {});
+      }
+    }
+  }
+
+  return resultsMap;
+}
+
+export interface ScanDependenciesOptions {
+  lockfileContent?: string;
+  lockfileFilename?: string;
+}
+
+/**
+ * Scans dependencies for known CVEs.
+ * 1. Resolves exact locked versions from `package-lock.json` / `pnpm-lock.yaml` / `yarn.lock` if available.
+ * 2. Queries OSV `/v1/querybatch` with chunking, timeouts, retries, and circuit breaker.
+ * 3. Reports transitive dependencies with path and flags PR-introduced vs pre-existing vulnerabilities.
+ */
+export async function scanDependencies(
+  manifestContent?: string,
+  options?: ScanDependenciesOptions
+): Promise<DepsScanToolOutput> {
+  const content = manifestContent || '';
   const parsedDeps = extractDependencies(content);
 
-  // If no dependencies were extracted (e.g. non-manifest diff or empty), return safe summary
   if (parsedDeps.length === 0) {
+    const fallbackVulnerabilities: VulnerabilityResult[] = [];
     if (content.trim()) {
-      vulnerabilities.push({
+      fallbackVulnerabilities.push({
         package: 'dependencies',
         version: 'current',
         vulnerabilityId: 'NONE',
@@ -296,18 +378,34 @@ export async function scanDependencies(manifestContent?: string): Promise<DepsSc
     return {
       success: true,
       totalDependenciesScanned: 0,
-      vulnerabilities,
+      vulnerabilities: fallbackVulnerabilities,
       summary: 'Scanned dependencies against OSV.dev database. 0 CVE security advisories detected.',
+      exactVersionsResolvedFromLockfile: false,
     };
   }
 
-  // Process all extracted dependencies dynamically through OSV.dev & Redis cache
-  const resultsPerDep = await Promise.all(
-    parsedDeps.map((dep) => queryOsvForDependency(dep.name, dep.version))
+  // Resolve exact versions from lockfile at PR head SHA
+  const resolutions = resolveExactDependencies(
+    parsedDeps.map((d) => ({ name: d.name, declaredVersion: d.version, isPrChange: d.isPrChange })),
+    options?.lockfileContent,
+    options?.lockfileFilename
   );
 
-  for (const res of resultsPerDep) {
-    vulnerabilities.push(...res);
+  const exactVersionsResolvedFromLockfile = resolutions.some((r) => r.isResolvedFromLockfile);
+
+  const depsToQuery = resolutions.map((r) => ({
+    name: r.name,
+    version: r.resolvedVersion,
+    isPrChange: r.isPrChange ?? true,
+    dependencyPath: r.dependencyPath,
+  }));
+
+  const resultsMap = await queryOsvBatch(depsToQuery);
+  const vulnerabilities: VulnerabilityResult[] = [];
+
+  for (const dep of depsToQuery) {
+    const found = resultsMap.get(`${dep.name}:${dep.version}`) || [];
+    vulnerabilities.push(...found);
   }
 
   if (vulnerabilities.length === 0) {
@@ -320,15 +418,22 @@ export async function scanDependencies(manifestContent?: string): Promise<DepsSc
     });
   }
 
-  const activeVulnsCount = vulnerabilities.filter((v) => v.vulnerabilityId !== 'NONE').length;
+  const activeVulns = vulnerabilities.filter((v) => v.vulnerabilityId !== 'NONE');
+  const prIntroducedCount = activeVulns.filter((v) => !v.isPreExisting).length;
+  const preExistingCount = activeVulns.filter((v) => v.isPreExisting).length;
+
+  let summaryMsg = '';
+  if (activeVulns.length > 0) {
+    summaryMsg = `Scanned ${depsToQuery.length} dependencies against OSV.dev database (${exactVersionsResolvedFromLockfile ? 'lockfile-resolved exact versions' : 'manifest semver ranges'}). Found ${activeVulns.length} security advisory flags (${prIntroducedCount} introduced by PR diff, ${preExistingCount} pre-existing).`;
+  } else {
+    summaryMsg = `Scanned ${depsToQuery.length} dependencies against OSV.dev database (${exactVersionsResolvedFromLockfile ? 'lockfile-resolved exact versions' : 'manifest semver ranges'}). 0 CVE security advisories detected.`;
+  }
 
   return {
     success: true,
-    totalDependenciesScanned: parsedDeps.length,
+    totalDependenciesScanned: depsToQuery.length,
     vulnerabilities,
-    summary:
-      activeVulnsCount > 0
-        ? `Scanned ${parsedDeps.length} dependencies against OSV.dev database. Found ${activeVulnsCount} security advisory flags.`
-        : `Scanned ${parsedDeps.length} dependencies against OSV.dev database. 0 CVE security advisories detected.`,
+    summary: summaryMsg,
+    exactVersionsResolvedFromLockfile,
   };
 }

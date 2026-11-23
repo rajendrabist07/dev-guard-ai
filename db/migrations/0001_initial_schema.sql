@@ -1,5 +1,5 @@
--- DevGuard AI Supabase schema.
--- Production Zero-Trust Database Specification with RLS and Anti-Replay Guardrails.
+-- Migration: 0001_initial_schema.sql
+-- Baseline schema: installations, repos, review_runs, findings, try_runs, webhook_deliveries, system_logs
 
 create extension if not exists "pgcrypto";
 
@@ -94,11 +94,7 @@ create index if not exists idx_webhook_deliveries_delivery_id on webhook_deliver
 create index if not exists idx_system_logs_created_at on system_logs(created_at desc);
 create index if not exists idx_system_logs_level on system_logs(level);
 
--- ==============================================================================
--- ROW-LEVEL SECURITY (RLS) POLICIES — ZERO-TRUST ACCESS CONTROL
--- ==============================================================================
-
--- 1. Enable RLS on all tables
+-- Row-Level Security
 alter table installations enable row level security;
 alter table repos enable row level security;
 alter table review_runs enable row level security;
@@ -107,53 +103,29 @@ alter table try_runs enable row level security;
 alter table webhook_deliveries enable row level security;
 alter table system_logs enable row level security;
 
--- 2. Service Role Bypass (For webhook ingestion, automated workers, and backend services)
 create policy "Service role has full access to installations"
-  on installations for all
-  using (auth.role() = 'service_role')
-  with check (auth.role() = 'service_role');
-
+  on installations for all using (auth.role() = 'service_role') with check (auth.role() = 'service_role');
 create policy "Service role has full access to repos"
-  on repos for all
-  using (auth.role() = 'service_role')
-  with check (auth.role() = 'service_role');
-
+  on repos for all using (auth.role() = 'service_role') with check (auth.role() = 'service_role');
 create policy "Service role has full access to review_runs"
-  on review_runs for all
-  using (auth.role() = 'service_role')
-  with check (auth.role() = 'service_role');
-
+  on review_runs for all using (auth.role() = 'service_role') with check (auth.role() = 'service_role');
 create policy "Service role has full access to findings"
-  on findings for all
-  using (auth.role() = 'service_role')
-  with check (auth.role() = 'service_role');
-
+  on findings for all using (auth.role() = 'service_role') with check (auth.role() = 'service_role');
 create policy "Service role has full access to try_runs"
-  on try_runs for all
-  using (auth.role() = 'service_role')
-  with check (auth.role() = 'service_role');
-
+  on try_runs for all using (auth.role() = 'service_role') with check (auth.role() = 'service_role');
 create policy "Service role has full access to webhook_deliveries"
-  on webhook_deliveries for all
-  using (auth.role() = 'service_role')
-  with check (auth.role() = 'service_role');
-
+  on webhook_deliveries for all using (auth.role() = 'service_role') with check (auth.role() = 'service_role');
 create policy "Service role has full access to system_logs"
-  on system_logs for all
-  using (auth.role() = 'service_role')
-  with check (auth.role() = 'service_role');
+  on system_logs for all using (auth.role() = 'service_role') with check (auth.role() = 'service_role');
 
--- 3. Authenticated User Policies (Authoritatively scoped by verified OAuth identity claims, NEVER client user_metadata)
 create policy "Users can view their own installations"
-  on installations for select
-  using (
+  on installations for select using (
     auth.role() = 'authenticated' and
     account_login = lower(coalesce(auth.jwt() -> 'app_metadata' ->> 'user_name', auth.jwt() -> 'identities' -> 0 -> 'identity_data' ->> 'user_name'))
   );
 
 create policy "Users can view repos belonging to their installations"
-  on repos for select
-  using (
+  on repos for select using (
     auth.role() = 'authenticated' and exists (
       select 1 from installations
       where installations.id = repos.installation_id
@@ -162,8 +134,7 @@ create policy "Users can view repos belonging to their installations"
   );
 
 create policy "Users can view review_runs for their authorized repos or simulations"
-  on review_runs for select
-  using (
+  on review_runs for select using (
     is_simulation = true or (
       auth.role() = 'authenticated' and exists (
         select 1 from repos
@@ -175,8 +146,7 @@ create policy "Users can view review_runs for their authorized repos or simulati
   );
 
 create policy "Users can view findings for their accessible review_runs"
-  on findings for select
-  using (
+  on findings for select using (
     exists (
       select 1 from review_runs
       where review_runs.id = findings.review_run_id
@@ -193,14 +163,11 @@ create policy "Users can view findings for their accessible review_runs"
     )
   );
 
--- 4. Try Runs Policies (Public interactive playground scoped by session_id & unexpired retention)
 create policy "Public users can create try runs"
-  on try_runs for insert
-  with check (true);
+  on try_runs for insert with check (true);
 
 create policy "Users can view try runs matching their session_id"
-  on try_runs for select
-  using (
+  on try_runs for select using (
     (session_id is not null and expires_at > now()) or
     auth.role() = 'authenticated' or
     auth.role() = 'anon'

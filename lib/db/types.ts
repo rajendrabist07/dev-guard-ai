@@ -1,6 +1,18 @@
 export type Severity = 'critical' | 'warning' | 'info';
-export type ReviewStatus = 'pending' | 'running' | 'completed' | 'failed';
+export type ReviewStatus = 'queued' | 'running' | 'completed' | 'failed' | 'timed_out' | 'pending';
 export type ConfidenceLevel = 'high' | 'medium' | 'low';
+
+export interface PaginationParams {
+  limit?: number;
+  cursor?: string | null;
+}
+
+export interface PaginatedResult<T> {
+  items: T[];
+  nextCursor: string | null;
+  hasMore: boolean;
+  totalCount?: number;
+}
 
 export interface Installation {
   id: string;
@@ -24,12 +36,16 @@ export interface ReviewRun {
   commit_sha: string;
   status: ReviewStatus;
   started_at: string | null;
+  finished_at?: string | null;
   completed_at: string | null;
+  attempt?: number;
+  error_code?: string | null;
+  error_message: string | null;
+  correlation_id?: string | null;
   pr_title: string | null;
   pr_author: string | null;
   tool_calls_count: number;
   agent_trace: AgentTraceStep[];
-  error_message: string | null;
   is_simulation: boolean;
   provider_used?: string | null;
   fallback_reason?: string | null;
@@ -48,6 +64,7 @@ export interface Finding {
   confidence?: ConfidenceLevel;
   corroboration_sources?: string[];
   human_judgment_recommended?: boolean;
+  created_at?: string;
 }
 
 export interface AgentTraceStep {
@@ -91,12 +108,16 @@ export type NewReviewRun = Pick<ReviewRun, 'repo_id' | 'pr_number' | 'commit_sha
     Pick<
       ReviewRun,
       | 'started_at'
+      | 'finished_at'
       | 'completed_at'
+      | 'attempt'
+      | 'error_code'
+      | 'error_message'
+      | 'correlation_id'
       | 'pr_title'
       | 'pr_author'
       | 'tool_calls_count'
       | 'agent_trace'
-      | 'error_message'
       | 'is_simulation'
     >
   >;

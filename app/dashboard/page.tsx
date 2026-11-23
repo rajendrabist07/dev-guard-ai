@@ -412,10 +412,16 @@ export default function DashboardPage() {
                           failed
                         </span>
                       )}
-                      {run.status === 'pending' && (
+                      {(run.status === 'queued' || run.status === 'pending') && (
                         <span className="hidden sm:inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/10 border border-amber-500/30 text-amber-400">
                           <Clock className="w-3 h-3 mr-1" />
-                          pending
+                          queued
+                        </span>
+                      )}
+                      {run.status === 'timed_out' && (
+                        <span className="hidden sm:inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-500/10 border border-purple-500/30 text-purple-400">
+                          <Clock className="w-3 h-3 mr-1" />
+                          timed out
                         </span>
                       )}
                       <ChevronRight className="w-5 h-5 text-gray-500 group-hover:text-white transition-colors" />

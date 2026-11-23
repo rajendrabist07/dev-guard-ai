@@ -100,7 +100,13 @@ export async function runAgentOrchestrator(
   fileNames: string[],
   reviewRunId = 'sim-run',
   onProgress?: (progress: ProgressUpdate) => void | Promise<void>,
-  options?: { forceDeterministic?: boolean }
+  options?: {
+    forceDeterministic?: boolean;
+    lockfileContent?: string;
+    lockfileFilename?: string;
+    fullFiles?: Map<string, string>;
+    correlationId?: string;
+  }
 ): Promise<OrchestrationResult> {
   // Pre-Execution Adaptive Complexity Classification & Routing
   const complexityRouting = classifyDiffComplexity(prDiff, fileNames);
@@ -211,18 +217,26 @@ export async function runAgentOrchestrator(
   if (trace.length < MAX_ITERATIONS && shouldScanDependencies(prDiff, fileNames)) {
     const stageStart = Date.now();
     try {
-      const depsResult = await scanDependencies(prDiff);
-      recordTrace('scanDependencies', { manifest: 'package.json' }, toRecord(depsResult));
+      const depsResult = await scanDependencies(prDiff, {
+        lockfileContent: options?.lockfileContent,
+        lockfileFilename: options?.lockfileFilename,
+      });
+      recordTrace('scanDependencies', { manifest: 'package.json', lockfileResolved: depsResult.exactVersionsResolvedFromLockfile }, toRecord(depsResult));
       depsSummary = depsResult.summary;
 
       for (const vulnerability of depsResult.vulnerabilities) {
         if (vulnerability.vulnerabilityId === 'NONE') continue;
+        const pathPrefix = vulnerability.dependencyPath && vulnerability.dependencyPath.length > 1
+          ? `[Path: ${vulnerability.dependencyPath.join(' -> ')}] `
+          : '';
+        const preExistingPrefix = vulnerability.isPreExisting ? '[Pre-existing Dependency] ' : '';
+
         findings.push({
           review_run_id: reviewRunId,
-          severity: vulnerability.severity,
+          severity: vulnerability.isPreExisting ? 'info' : vulnerability.severity,
           file_path: 'package.json',
           line: 1,
-          message: `[${vulnerability.vulnerabilityId}] ${vulnerability.summary} (${vulnerability.package}@${vulnerability.version})`,
+          message: `${preExistingPrefix}${pathPrefix}[${vulnerability.vulnerabilityId}] ${vulnerability.summary} (${vulnerability.package}@${vulnerability.version})`,
           suggested_fix: vulnerability.recommendedVersion
             ? `"${vulnerability.package}": "${vulnerability.recommendedVersion}"`
             : null,

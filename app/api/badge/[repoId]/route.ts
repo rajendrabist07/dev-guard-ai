@@ -57,7 +57,7 @@ export async function GET(
           .maybeSingle();
 
         if (latestRun) {
-          if (latestRun.status === 'running' || latestRun.status === 'pending') {
+          if (latestRun.status === 'running' || latestRun.status === 'queued' || latestRun.status === 'pending') {
             badgeValue = 'reviewing...';
             badgeColor = 'cyan';
           } else {

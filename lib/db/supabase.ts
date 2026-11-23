@@ -8,6 +8,8 @@ import {
   FindingsTimelinePoint,
   NewFinding,
   NewReviewRun,
+  PaginatedResult,
+  PaginationParams,
   Repo,
   ReviewStatus,
   ToolSourceBreakdown,
@@ -105,10 +107,18 @@ export async function getRepos(accessibleRepoIds?: string[]): Promise<Repo[]> {
   }
 }
 
-export async function getReviewRuns(accessibleRepoIds?: string[]): Promise<DisplayReviewRun[]> {
+export async function getReviewRuns(
+  accessibleRepoIds?: string[],
+  limit = 100
+): Promise<DisplayReviewRun[]> {
   try {
     const db = requireSupabaseAdmin();
-    let query = db.from('review_runs').select('*').order('started_at', { ascending: false });
+    let query = db
+      .from('review_runs')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
     if (accessibleRepoIds && accessibleRepoIds.length > 0) {
       query = query.in('repo_id', accessibleRepoIds);
     } else if (accessibleRepoIds && accessibleRepoIds.length === 0) {
@@ -127,10 +137,60 @@ export async function getReviewRuns(accessibleRepoIds?: string[]): Promise<Displ
   }
 }
 
-export async function getFindings(accessibleRunIds?: string[]): Promise<Finding[]> {
+export async function getPaginatedReviewRuns(
+  accessibleRepoIds?: string[],
+  pagination: PaginationParams = {}
+): Promise<PaginatedResult<DisplayReviewRun>> {
+  const limit = Math.min(Math.max(pagination.limit ?? 20, 1), 100);
   try {
     const db = requireSupabaseAdmin();
-    let query = db.from('findings').select('*').order('created_at', { ascending: false });
+    let query = db
+      .from('review_runs')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(limit + 1);
+
+    if (accessibleRepoIds && accessibleRepoIds.length > 0) {
+      query = query.in('repo_id', accessibleRepoIds);
+    } else if (accessibleRepoIds && accessibleRepoIds.length === 0) {
+      return { items: [], nextCursor: null, hasMore: false };
+    }
+
+    if (pagination.cursor) {
+      query = query.lt('created_at', pagination.cursor);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      console.warn(`Paginated review runs query: ${error.message}`);
+      return { items: [], nextCursor: null, hasMore: false };
+    }
+
+    const rows = (data ?? []) as DisplayReviewRun[];
+    const hasMore = rows.length > limit;
+    const items = hasMore ? rows.slice(0, limit) : rows;
+    const nextCursor =
+      hasMore && items.length > 0 ? (items[items.length - 1].created_at ?? items[items.length - 1].id) : null;
+
+    return { items, nextCursor, hasMore };
+  } catch (err) {
+    console.warn('getPaginatedReviewRuns fallback:', err);
+    return { items: [], nextCursor: null, hasMore: false };
+  }
+}
+
+export async function getFindings(
+  accessibleRunIds?: string[],
+  limit = 200
+): Promise<Finding[]> {
+  try {
+    const db = requireSupabaseAdmin();
+    let query = db
+      .from('findings')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
     if (accessibleRunIds && accessibleRunIds.length > 0) {
       query = query.in('review_run_id', accessibleRunIds);
     } else if (accessibleRunIds && accessibleRunIds.length === 0) {
@@ -146,6 +206,48 @@ export async function getFindings(accessibleRunIds?: string[]): Promise<Finding[
   } catch (err) {
     console.warn('getFindings fallback:', err);
     return [];
+  }
+}
+
+export async function getPaginatedFindings(
+  accessibleRunIds?: string[],
+  pagination: PaginationParams = {}
+): Promise<PaginatedResult<Finding>> {
+  const limit = Math.min(Math.max(pagination.limit ?? 50, 1), 200);
+  try {
+    const db = requireSupabaseAdmin();
+    let query = db
+      .from('findings')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(limit + 1);
+
+    if (accessibleRunIds && accessibleRunIds.length > 0) {
+      query = query.in('review_run_id', accessibleRunIds);
+    } else if (accessibleRunIds && accessibleRunIds.length === 0) {
+      return { items: [], nextCursor: null, hasMore: false };
+    }
+
+    if (pagination.cursor) {
+      query = query.lt('created_at', pagination.cursor);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      console.warn(`Paginated findings query: ${error.message}`);
+      return { items: [], nextCursor: null, hasMore: false };
+    }
+
+    const rows = (data ?? []) as Finding[];
+    const hasMore = rows.length > limit;
+    const items = hasMore ? rows.slice(0, limit) : rows;
+    const nextCursor =
+      hasMore && items.length > 0 ? (items[items.length - 1].created_at ?? items[items.length - 1].id) : null;
+
+    return { items, nextCursor, hasMore };
+  } catch (err) {
+    console.warn('getPaginatedFindings fallback:', err);
+    return { items: [], nextCursor: null, hasMore: false };
   }
 }
 
@@ -590,9 +692,13 @@ export async function createReviewRunOnConflictDoNothing(
     status: data.status,
     tool_calls_count: data.tool_calls_count ?? 0,
     agent_trace: data.agent_trace ?? [],
+    error_code: data.error_code ?? null,
     error_message: data.error_message ?? null,
+    attempt: data.attempt ?? 1,
+    correlation_id: data.correlation_id ?? null,
     is_simulation: data.is_simulation ?? false,
-    started_at: data.started_at ?? new Date().toISOString(),
+    started_at: data.started_at ?? (data.status === 'running' ? new Date().toISOString() : null),
+    finished_at: data.finished_at ?? null,
     completed_at: data.completed_at ?? null,
   };
 
@@ -633,9 +739,13 @@ export async function createReviewRunOnConflictDoNothing(
     status: data.status,
     tool_calls_count: data.tool_calls_count ?? 0,
     agent_trace: data.agent_trace ?? [],
+    error_code: data.error_code ?? null,
     error_message: data.error_message ?? null,
+    attempt: data.attempt ?? 1,
+    correlation_id: data.correlation_id ?? null,
     is_simulation: data.is_simulation ?? false,
-    started_at: data.started_at ?? new Date().toISOString(),
+    started_at: data.started_at ?? (data.status === 'running' ? new Date().toISOString() : null),
+    finished_at: data.finished_at ?? null,
     completed_at: data.completed_at ?? null,
     created_at: new Date().toISOString(),
   };
@@ -653,9 +763,13 @@ export async function createReviewRun(data: NewReviewRun): Promise<DisplayReview
     status: data.status,
     tool_calls_count: data.tool_calls_count ?? 0,
     agent_trace: data.agent_trace ?? [],
+    error_code: data.error_code ?? null,
     error_message: data.error_message ?? null,
+    attempt: data.attempt ?? 1,
+    correlation_id: data.correlation_id ?? null,
     is_simulation: data.is_simulation ?? false,
-    started_at: data.started_at ?? new Date().toISOString(),
+    started_at: data.started_at ?? (data.status === 'running' ? new Date().toISOString() : null),
+    finished_at: data.finished_at ?? null,
     completed_at: data.completed_at ?? null,
   };
 
@@ -664,19 +778,196 @@ export async function createReviewRun(data: NewReviewRun): Promise<DisplayReview
   return created as DisplayReviewRun;
 }
 
+const VALID_STATE_TRANSITIONS: Record<ReviewStatus, ReviewStatus[]> = {
+  queued: ['running', 'failed'],
+  running: ['completed', 'failed', 'timed_out'],
+  pending: ['running', 'completed', 'failed'],
+  completed: [],
+  failed: [],
+  timed_out: [],
+};
+
+export async function transitionReviewRunState(
+  id: string,
+  targetStatus: ReviewStatus,
+  details?: {
+    errorCode?: string | null;
+    errorMessage?: string | null;
+    correlationId?: string | null;
+    attempt?: number;
+    startedAt?: string | null;
+    finishedAt?: string | null;
+    toolCallsCount?: number;
+    agentTrace?: AgentTraceStep[];
+  }
+): Promise<{ success: boolean; run: DisplayReviewRun | null; reason?: string }> {
+  const db = getSupabaseAdmin();
+  const nowIso = new Date().toISOString();
+
+  // 1. Fetch current run
+  let currentRun: DisplayReviewRun | null = null;
+  if (db) {
+    try {
+      const { data, error } = await db.from('review_runs').select('*').eq('id', id).maybeSingle();
+      if (!error && data) {
+        currentRun = data as DisplayReviewRun;
+      }
+    } catch {
+      // Fall through to in-memory check
+    }
+  }
+
+  if (!currentRun && inMemorySimulations.has(id)) {
+    currentRun = inMemorySimulations.get(id)!.run;
+  }
+
+  if (!currentRun) {
+    return { success: false, run: null, reason: `Review run ${id} not found.` };
+  }
+
+  // Idempotent no-op if status matches
+  if (currentRun.status === targetStatus) {
+    return { success: true, run: currentRun };
+  }
+
+  // Validate state machine transition
+  const allowed = VALID_STATE_TRANSITIONS[currentRun.status] || [];
+  if (!allowed.includes(targetStatus)) {
+    return {
+      success: false,
+      run: currentRun,
+      reason: `Invalid state transition: Cannot transition from '${currentRun.status}' to '${targetStatus}'.`,
+    };
+  }
+
+  const updates: Record<string, unknown> = {
+    status: targetStatus,
+  };
+
+  if (targetStatus === 'running') {
+    updates.started_at = details?.startedAt ?? currentRun.started_at ?? nowIso;
+    if (details?.attempt !== undefined) updates.attempt = details.attempt;
+  } else if (targetStatus === 'completed' || targetStatus === 'failed' || targetStatus === 'timed_out') {
+    updates.finished_at = details?.finishedAt ?? nowIso;
+    updates.completed_at = details?.finishedAt ?? nowIso;
+  }
+
+  if (details?.errorCode !== undefined) updates.error_code = details.errorCode;
+  if (details?.errorMessage !== undefined) updates.error_message = details.errorMessage;
+  if (details?.correlationId !== undefined) updates.correlation_id = details.correlationId;
+  if (details?.toolCallsCount !== undefined) updates.tool_calls_count = details.toolCallsCount;
+  if (details?.agentTrace !== undefined) updates.agent_trace = details.agentTrace;
+
+  if (db) {
+    try {
+      const { data: updated, error } = await db
+        .from('review_runs')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (!error && updated) {
+        return { success: true, run: updated as DisplayReviewRun };
+      }
+    } catch {
+      // Fall through to in-memory fallback
+    }
+  }
+
+  // In-memory fallback update
+  const updatedRun: DisplayReviewRun = {
+    ...currentRun,
+    ...updates,
+  } as DisplayReviewRun;
+
+  if (inMemorySimulations.has(id)) {
+    const sim = inMemorySimulations.get(id)!;
+    inMemorySimulations.set(id, { run: updatedRun, findings: sim.findings });
+  }
+
+  return { success: true, run: updatedRun };
+}
+
 export async function updateReviewRun(
   id: string,
   data: Partial<{
     status: ReviewStatus;
     tool_calls_count: number;
     agent_trace: AgentTraceStep[];
+    error_code: string | null;
     error_message: string | null;
     completed_at: string | null;
+    finished_at: string | null;
+    started_at: string | null;
+    attempt: number;
+    correlation_id: string | null;
   }>
 ): Promise<void> {
   const db = requireSupabaseAdmin();
   const { error } = await db.from('review_runs').update(data).eq('id', id);
   if (error) throw new Error(`Failed to update review run: ${error.message}`);
+}
+
+export async function findStuckRunningReviewRuns(timeoutSeconds = 300): Promise<DisplayReviewRun[]> {
+  const db = getSupabaseAdmin();
+  if (!db) return [];
+
+  const threshold = new Date(Date.now() - timeoutSeconds * 1000).toISOString();
+  const { data, error } = await db
+    .from('review_runs')
+    .select('*')
+    .eq('status', 'running')
+    .lt('started_at', threshold);
+
+  if (error) {
+    console.warn('findStuckRunningReviewRuns query error:', error.message);
+    return [];
+  }
+  return (data ?? []) as DisplayReviewRun[];
+}
+
+export async function runDataRetentionCleanup(): Promise<{
+  tryRunsDeleted: number;
+  logsDeleted: number;
+  deliveriesDeleted: number;
+  timestamp: string;
+}> {
+  const db = getSupabaseAdmin();
+  const timestamp = new Date().toISOString();
+  if (!db) {
+    return { tryRunsDeleted: 0, logsDeleted: 0, deliveriesDeleted: 0, timestamp };
+  }
+
+  let tryRunsDeleted = 0;
+  let logsDeleted = 0;
+  let deliveriesDeleted = 0;
+
+  try {
+    const { count: tryCount } = await db
+      .from('try_runs')
+      .delete({ count: 'exact' })
+      .lt('expires_at', timestamp);
+    tryRunsDeleted = tryCount ?? 0;
+
+    const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
+    const { count: logCount } = await db
+      .from('system_logs')
+      .delete({ count: 'exact' })
+      .lt('created_at', fourteenDaysAgo);
+    logsDeleted = logCount ?? 0;
+
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const { count: deliveryCount } = await db
+      .from('webhook_deliveries')
+      .delete({ count: 'exact' })
+      .lt('created_at', sevenDaysAgo);
+    deliveriesDeleted = deliveryCount ?? 0;
+  } catch (err) {
+    console.warn('Data retention cleanup warning:', err);
+  }
+
+  return { tryRunsDeleted, logsDeleted, deliveriesDeleted, timestamp };
 }
 
 export async function saveFindings(findings: NewFinding[]): Promise<Finding[]> {

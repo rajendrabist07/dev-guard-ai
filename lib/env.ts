@@ -9,11 +9,18 @@ const FORBIDDEN_CLIENT_SECRETS = [
   'NEXT_PUBLIC_GITHUB_PRIVATE_KEY',
   'NEXT_PUBLIC_GITHUB_WEBHOOK_SECRET',
   'NEXT_PUBLIC_UPSTASH_REDIS_REST_TOKEN',
+  'NEXT_PUBLIC_QSTASH_TOKEN',
+  'NEXT_PUBLIC_QSTASH_CURRENT_SIGNING_KEY',
+  'NEXT_PUBLIC_QSTASH_NEXT_SIGNING_KEY',
+  'NEXT_PUBLIC_CRON_SECRET',
 ];
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   
+  // Application Base URL (for webhooks & worker callbacks)
+  APP_BASE_URL: z.string().url().optional(),
+
   // LLM Providers (Server-Only)
   GROQ_API_KEY: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
@@ -43,6 +50,15 @@ const envSchema = z.object({
   // Upstash Redis (Server-Only)
   UPSTASH_REDIS_REST_URL: z.string().url().optional(),
   UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
+
+  // Upstash QStash Durable Queue (Server-Only)
+  QSTASH_URL: z.string().url().optional(),
+  QSTASH_TOKEN: z.string().optional(),
+  QSTASH_CURRENT_SIGNING_KEY: z.string().optional(),
+  QSTASH_NEXT_SIGNING_KEY: z.string().optional(),
+
+  // Vercel Cron Maintenance Secret (Server-Only)
+  CRON_SECRET: z.string().optional(),
 
   // Admin Access Control (Server-Only)
   ADMIN_GITHUB_LOGINS: z
