@@ -11,6 +11,7 @@ import {
 import { runAgentOrchestrator } from '@/lib/agent/orchestrator';
 import { logger } from '@/lib/observability/logger';
 import { ReviewJobPayload } from '@/lib/queue/qstash';
+import { getIngestedCiData } from '@/lib/ingest/store';
 
 export async function executeReviewJob(payload: ReviewJobPayload): Promise<{
   success: boolean;
@@ -89,21 +90,65 @@ export async function executeReviewJob(payload: ReviewJobPayload): Promise<{
       correlationId,
     });
 
-    // 4. Post GitHub Review Comment with Diff-Hunk Line Validation & Truncation Notice
+    // 4. Ingest and merge external CI findings (Semgrep, OSV, test execution) from devguard-action if present
+    const ciData = await getIngestedCiData(repoFullName, commitSha);
+    let testNotice = 'tests: not executed — install devguard-action to enable';
+    const mergedFindings = [...result.findings];
+
+    if (ciData) {
+      if (ciData.tests) {
+        testNotice = ciData.tests.passed
+          ? `tests: executed (${ciData.tests.command} passed in ${ciData.tests.durationMs}ms)`
+          : `tests: executed (${ciData.tests.command} failed with exit code ${ciData.tests.exitCode})`;
+      }
+
+      // Merge and deduplicate Semgrep & OSV findings
+      for (const f of ciData.findings) {
+        const existingIdx = mergedFindings.findIndex(
+          (m) => m.file_path === f.file && Math.abs(m.line - f.line) <= 1
+        );
+
+        if (existingIdx !== -1) {
+          const existing = mergedFindings[existingIdx];
+          const sources = new Set(existing.corroboration_sources || [existing.tool_source || 'runLinter']);
+          sources.add(f.source);
+          mergedFindings[existingIdx] = {
+            ...existing,
+            confidence: 'high',
+            corroboration_sources: Array.from(sources),
+          };
+        } else {
+          mergedFindings.push({
+            review_run_id: reviewRunId,
+            file_path: f.file,
+            line: f.line,
+            message: f.message,
+            severity: f.severity,
+            suggested_fix: f.suggestedFix || null,
+            tool_source: f.source,
+            corroboration_sources: [f.source],
+            confidence: 'high',
+          });
+        }
+      }
+    }
+
+    // 5. Post GitHub Review Comment with Diff-Hunk Line Validation & Truncation Notice
     await postGitHubReviewComment(
       octokit,
       owner,
       repoName,
       prNumber,
       commitSha,
-      result.findings,
+      mergedFindings,
       result.summary,
       prDetails.diff,
-      prDetails.truncation
+      prDetails.truncation,
+      testNotice
     );
 
-    // 5. Persist Findings & Transition State: running -> completed
-    await saveFindings(result.findings);
+    // 6. Persist Findings & Transition State: running -> completed
+    await saveFindings(mergedFindings);
 
     await transitionReviewRunState(reviewRunId, 'completed', {
       finishedAt: new Date().toISOString(),
@@ -117,7 +162,7 @@ export async function executeReviewJob(payload: ReviewJobPayload): Promise<{
       module: 'review-pipeline',
       action: 'execution-completed',
       reviewRunId,
-      findingsCount: result.findings.length,
+      findingsCount: mergedFindings.length,
       durationMs,
       correlationId,
     });
@@ -125,7 +170,7 @@ export async function executeReviewJob(payload: ReviewJobPayload): Promise<{
     return {
       success: true,
       reviewRunId,
-      findingsCount: result.findings.length,
+      findingsCount: mergedFindings.length,
       durationMs,
     };
   } catch (err: unknown) {

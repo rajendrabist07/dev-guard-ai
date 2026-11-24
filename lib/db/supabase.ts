@@ -625,6 +625,22 @@ export async function ensureRepoForInstallation(input: {
   return createdRepo as Repo;
 }
 
+export async function findRepoByFullName(fullName: string): Promise<Repo | null> {
+  try {
+    const db = requireSupabaseAdmin();
+    const { data, error } = await db
+      .from('repos')
+      .select('*')
+      .eq('full_name', fullName)
+      .maybeSingle();
+
+    if (error || !data) return null;
+    return data as Repo;
+  } catch {
+    return null;
+  }
+}
+
 export async function findExistingReviewRun(repoId: string, prNumber: number, commitSha: string): Promise<DisplayReviewRun | null> {
   try {
     const db = requireSupabaseAdmin();

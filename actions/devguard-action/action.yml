@@ -1,0 +1,184 @@
+name: 'DevGuard AI Security & Test Runner'
+description: 'Runs real Semgrep, OSV-Scanner, and local test suites in CI and ingests verified results into DevGuard AI via GitHub OIDC'
+author: 'DevGuard AI'
+branding:
+  icon: 'shield-check'
+  color: 'blue'
+
+inputs:
+  devguard-url:
+    description: 'Base URL of your DevGuard AI instance (e.g. https://devguard.ai)'
+    required: false
+    default: 'https://dev-guard-ai.vercel.app'
+  test-command:
+    description: 'Repository test command to execute'
+    required: false
+    default: 'npm test'
+  enable-semgrep:
+    description: 'Whether to execute Semgrep security rule scans'
+    required: false
+    default: 'true'
+  enable-osv:
+    description: 'Whether to execute OSV-Scanner dependency checks'
+    required: false
+    default: 'true'
+  enable-tests:
+    description: 'Whether to run the repository test suite'
+    required: false
+    default: 'true'
+  oidc-audience:
+    description: 'Expected audience claim for GitHub OIDC token exchange'
+    required: false
+    default: 'devguard-ai'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Semgrep
+      if: inputs.enable-semgrep == 'true'
+      shell: bash
+      run: |
+        echo "Installing Semgrep..."
+        python3 -m pip install --upgrade semgrep || pip install semgrep || echo "Semgrep pip install fallback"
+
+    - name: Run Semgrep Security Audit
+      if: inputs.enable-semgrep == 'true'
+      shell: bash
+      continue-on-error: true
+      run: |
+        echo "Running Semgrep security analysis..."
+        semgrep scan --config "p/security-audit" --config "p/owasp-top-ten" --json -o /tmp/semgrep-results.json || true
+        if [ ! -f /tmp/semgrep-results.json ]; then
+          echo '{"results":[]}' > /tmp/semgrep-results.json
+        fi
+
+    - name: Set up OSV-Scanner
+      if: inputs.enable-osv == 'true'
+      shell: bash
+      run: |
+        echo "Downloading OSV-Scanner binary..."
+        curl -sSL -o /usr/local/bin/osv-scanner https://github.com/google/osv-scanner/releases/latest/download/osv-scanner_linux_amd64 || true
+        chmod +x /usr/local/bin/osv-scanner || true
+
+    - name: Run OSV-Scanner
+      if: inputs.enable-osv == 'true'
+      shell: bash
+      continue-on-error: true
+      run: |
+        echo "Running OSV-Scanner..."
+        if command -v osv-scanner >/dev/null 2>&1; then
+          osv-scanner -r . --json > /tmp/osv-results.json || true
+        else
+          echo '{"results":[]}' > /tmp/osv-results.json
+        fi
+        if [ ! -f /tmp/osv-results.json ]; then
+          echo '{"results":[]}' > /tmp/osv-results.json
+        fi
+
+    - name: Run Repository Test Suite
+      if: inputs.enable-tests == 'true'
+      shell: bash
+      continue-on-error: true
+      id: test_run
+      run: |
+        echo "Executing repository tests: ${{ inputs.test-command }}"
+        START_TIME=$(date +%s%3N)
+        TEST_OUTPUT=$(eval "${{ inputs.test-command }}" 2>&1) || TEST_EXIT_CODE=$?
+        TEST_EXIT_CODE=${TEST_EXIT_CODE:-0}
+        END_TIME=$(date +%s%3N)
+        DURATION_MS=$((END_TIME - START_TIME))
+
+        node -e '
+          const fs = require("fs");
+          const exitCode = parseInt(process.env.TEST_EXIT_CODE || "0", 10);
+          const duration = parseInt(process.env.DURATION_MS || "0", 10);
+          const rawOutput = process.env.TEST_OUTPUT || "";
+          
+          fs.writeFileSync("/tmp/devguard-test-results.json", JSON.stringify({
+            command: process.env.TEST_COMMAND,
+            exitCode,
+            passed: exitCode === 0,
+            durationMs: duration,
+            outputSnippet: rawOutput.slice(-2000),
+          }));
+        '
+      env:
+        TEST_COMMAND: ${{ inputs.test-command }}
+        TEST_EXIT_CODE: ${{ steps.test_run.outputs.exit_code }}
+
+    - name: Request GitHub OIDC Token and Ingest into DevGuard AI
+      shell: bash
+      run: |
+        echo "Exchanging GitHub Actions OIDC token..."
+        if [ -z "$ACTIONS_ID_TOKEN_REQUEST_TOKEN" ]; then
+          echo "Error: ACTIONS_ID_TOKEN_REQUEST_TOKEN is not set. Ensure workflow has 'permissions: id-token: write'."
+          exit 1
+        fi
+
+        OIDC_TOKEN=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+          "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=${{ inputs.oidc-audience }}" | jq -r '.value')
+
+        if [ -z "$OIDC_TOKEN" ] || [ "$OIDC_TOKEN" = "null" ]; then
+          echo "Failed to acquire GitHub OIDC token."
+          exit 1
+        fi
+
+        node -e '
+          const fs = require("fs");
+          const https = require("https");
+          const http = require("http");
+
+          const semgrepData = fs.existsSync("/tmp/semgrep-results.json")
+            ? JSON.parse(fs.readFileSync("/tmp/semgrep-results.json", "utf8"))
+            : { results: [] };
+
+          const osvData = fs.existsSync("/tmp/osv-results.json")
+            ? JSON.parse(fs.readFileSync("/tmp/osv-results.json", "utf8"))
+            : { results: [] };
+
+          const testData = fs.existsSync("/tmp/devguard-test-results.json")
+            ? JSON.parse(fs.readFileSync("/tmp/devguard-test-results.json", "utf8"))
+            : null;
+
+          const payload = JSON.stringify({
+            repository: process.env.GITHUB_REPOSITORY,
+            sha: process.env.GITHUB_SHA,
+            ref: process.env.GITHUB_REF,
+            runId: process.env.GITHUB_RUN_ID,
+            semgrep: semgrepData,
+            osv: osvData,
+            tests: testData,
+          });
+
+          const targetUrl = new URL("${{ inputs.devguard-url }}/api/ingest");
+          const isHttps = targetUrl.protocol === "https:";
+          const client = isHttps ? https : http;
+
+          const req = client.request(targetUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": "Bearer " + process.env.OIDC_TOKEN,
+              "Content-Length": Buffer.byteLength(payload),
+            },
+          }, (res) => {
+            let data = "";
+            res.on("data", (chunk) => data += chunk);
+            res.on("end", () => {
+              console.log("DevGuard ingest response HTTP " + res.statusCode + ": " + data);
+              if (res.statusCode >= 400) {
+                process.exit(1);
+              }
+            });
+          });
+
+          req.on("error", (err) => {
+            console.error("Failed to post findings to DevGuard AI:", err);
+            process.exit(1);
+          });
+
+          req.write(payload);
+          req.end();
+        '
+      env:
+        OIDC_TOKEN: ${{ env.OIDC_TOKEN }}

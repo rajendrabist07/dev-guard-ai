@@ -1,10 +1,10 @@
 /**
- * Static Test & Assertion Validator.
+ * Security Invariant Assertion Checker (Static).
  * 
  * DESIGN NOTE: In a webhook/serverless PR-review context where arbitrary containerized
- * test execution (e.g. `npm test` inside an isolated microVM) is not provisioned,
- * this tool validates critical code patterns against security and functional invariant
- * assertions rather than fabricating full sandbox execution.
+ * test execution (e.g. `npm test` inside an isolated microVM) is not provisioned without
+ * devguard-action, this tool performs static verification of critical code patterns
+ * against security and functional invariant assertions rather than fabricating full test runner output.
  */
 export interface TestRunnerOutput {
   success: boolean;
@@ -17,11 +17,18 @@ export interface TestRunnerOutput {
     errorMessage: string;
   }>;
   summary: string;
+  isRealExecution?: boolean;
 }
 
-export async function runTests(testFilePath?: string, diffSnippet?: string): Promise<TestRunnerOutput> {
+/**
+ * Runs static security invariant checks against code snippets or diffs.
+ */
+export async function runSecurityInvariantChecks(
+  targetFilePath?: string,
+  diffSnippet?: string
+): Promise<TestRunnerOutput> {
   const failures: Array<{ testName: string; filePath: string; errorMessage: string }> = [];
-  const targetFile = testFilePath || 'tests/checkout.test.ts';
+  const targetFile = targetFilePath || 'tests/security-invariants.test.ts';
   const content = diffSnippet || '';
 
   try {
@@ -63,9 +70,10 @@ export async function runTests(testFilePath?: string, diffSnippet?: string): Pro
       passedAssertions: passedCount,
       failedAssertions: failedCount,
       failures,
+      isRealExecution: false,
       summary: failedCount === 0
-        ? `Static Assertion Validator: Verified ${assertionsChecked} security/reliability invariants (0 failures).`
-        : `Static Assertion Validator: ${failedCount} invariant failure(s) detected across target code paths.`,
+        ? `Security Invariant Validator (Static): Verified ${assertionsChecked} security/reliability invariants (0 failures).`
+        : `Security Invariant Validator (Static): ${failedCount} invariant failure(s) detected across target code paths.`,
     };
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : 'Assertion validation failure';
@@ -75,7 +83,13 @@ export async function runTests(testFilePath?: string, diffSnippet?: string): Pro
       passedAssertions: 0,
       failedAssertions: 0,
       failures: [],
-      summary: `Static assertion check skipped: ${errorMsg}`,
+      isRealExecution: false,
+      summary: `Static security invariant check skipped: ${errorMsg}`,
     };
   }
 }
+
+/**
+ * Backward-compatible alias for orchestrator and existing suites.
+ */
+export const runTests = runSecurityInvariantChecks;

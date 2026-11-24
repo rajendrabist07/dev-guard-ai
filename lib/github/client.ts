@@ -319,7 +319,8 @@ export async function postGitHubReviewComment(
   findings: NewFinding[],
   summaryText: string,
   rawDiff?: string,
-  truncation?: PullRequestDetails['truncation']
+  truncation?: PullRequestDetails['truncation'],
+  testExecutionNotice?: string
 ): Promise<boolean> {
   return await githubCircuitBreaker.execute(async () => {
     try {
@@ -372,6 +373,12 @@ ${finding.suggested_fix ? `\`\`\`suggestion\n${finding.suggested_fix}\n\`\`\`` :
 
       if (truncation?.isTruncated) {
         additionalNotesSection += `\n\n> ⚠️ **Review Scope Notice**: Analyzed ${truncation.analyzedFilesCount} of ${truncation.totalFilesCount} changed files (${truncation.skippedFilesCount} skipped due to review cap).`;
+      }
+
+      if (testExecutionNotice) {
+        additionalNotesSection += `\n\n> 🧪 **Test Suite Status**: ${testExecutionNotice}`;
+      } else {
+        additionalNotesSection += `\n\n> ℹ️ **Test Suite Status**: tests: not executed — install \`devguard-action\` to enable.`;
       }
 
       if (outOfDiffFindings.length > 0) {

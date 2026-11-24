@@ -50,7 +50,7 @@ export default function Home() {
         </h1>
 
         <p className="mt-6 text-lg sm:text-xl text-gray-400 max-w-2xl mx-auto font-normal leading-relaxed">
-          DevGuard AI reviews pull requests for security and reliability issues. It executes static security rules, checks OSV vulnerability databases for dependencies, and validates code diff invariants before synthesizing structured inline feedback.
+          DevGuard AI reviews pull requests for security and reliability issues. It executes an in-app AST security analyzer across 9 CWE vulnerability classes, checks OSV.dev databases with exact lockfile resolution, and verifies real CI execution via devguard-action before synthesizing structured inline feedback.
         </p>
 
         <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -88,7 +88,7 @@ export default function Home() {
             </div>
             <h3 className="text-base font-bold text-white mb-2">Diagnostic Tool Evidence</h3>
             <p className="text-xs text-gray-400 leading-relaxed">
-              Runs static security rules, queries OSV.dev vulnerability databases for <code className="text-emerald-300">package.json</code> dependencies, and checks diff-level invariants.
+              Runs in-app AST security analysis across 9 CWE classes, queries OSV.dev vulnerability databases with exact lockfile resolution, and verifies real CI execution via devguard-action.
             </p>
           </div>
 
