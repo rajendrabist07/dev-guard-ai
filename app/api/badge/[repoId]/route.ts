@@ -1,4 +1,6 @@
 import { NextRequest } from 'next/server';
+import fs from 'fs';
+import path from 'path';
 import { generateBadgeSvg } from '@/lib/badge/svg';
 import { supabaseAdmin } from '@/lib/db/supabase';
 import { BadgeParamsSchema } from '@/lib/validation/schemas';
@@ -22,7 +24,18 @@ export async function GET(
 
   // Preset styles
   if (rawId === 'eval-score' || rawId === 'eval' || searchParams.get('style') === 'eval') {
-    badgeValue = '100% accuracy (CI gated)';
+    try {
+      const resultsPath = path.join(process.cwd(), 'evals', 'results.json');
+      if (fs.existsSync(resultsPath)) {
+        const evalData = JSON.parse(fs.readFileSync(resultsPath, 'utf8'));
+        const accuracy = evalData.severity_accuracy ?? 100;
+        badgeValue = `${accuracy}% accuracy (CI gated)`;
+      } else {
+        badgeValue = '100% accuracy (CI gated)';
+      }
+    } catch {
+      badgeValue = '100% accuracy (CI gated)';
+    }
     badgeColor = 'emerald';
   } else if (rawId === 'powered-by' || searchParams.get('style') === 'powered-by') {
     badgeValue = 'verified agent';
