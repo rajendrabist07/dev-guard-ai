@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Navbar from '@/components/Navbar';
 import Link from 'next/link';
 import {
@@ -123,6 +123,16 @@ export default function TryPage() {
   const [result, setResult] = useState<ReviewResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [rateLimitCooldown, setRateLimitCooldown] = useState<number>(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const handleCancelReview = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsLoading(false);
+    setError('Review was cancelled by user.');
+  };
 
   // Countdown timer for rate limiting
   useEffect(() => {
@@ -187,6 +197,7 @@ export default function TryPage() {
     setLoadingStep('Initializing Agent Orchestrator & Static Analysis...');
 
     const controller = new AbortController();
+    abortControllerRef.current = controller;
     const timeoutTimer = setTimeout(() => {
       controller.abort();
     }, 30000); // Strict 30s hard timeout
@@ -584,8 +595,8 @@ export default function TryPage() {
                   <label className="text-xs font-semibold text-gray-300">
                     Paste Code Snippet or Unified Diff:
                   </label>
-                  <span className={`text-[11px] font-mono ${customDiff.length > 90000 ? 'text-rose-400 font-bold' : 'text-gray-400'}`}>
-                    {(customDiff.length / 1024).toFixed(1)} KB / 100 KB max
+                  <span className={`text-xs font-mono ${customDiff.length > 90000 ? 'text-rose-400 font-bold' : 'text-slate-400'}`}>
+                    {customDiff.split('\n').length} lines • {(customDiff.length / 1024).toFixed(1)} KB / 100 KB max
                   </span>
                 </div>
                 <textarea
@@ -640,7 +651,16 @@ export default function TryPage() {
                 <Loader2 className="w-5 h-5 animate-spin text-emerald-400" />
                 <span>Agent Execution in Progress:</span>
               </div>
-              <span className="text-xs font-mono text-emerald-400/80">Active Tool Loop</span>
+              <div className="flex items-center space-x-3">
+                <span className="text-xs font-mono text-emerald-400/80 hidden sm:inline">Active Tool Loop</span>
+                <button
+                  type="button"
+                  onClick={handleCancelReview}
+                  className="px-3 py-1.5 text-xs text-rose-300 hover:text-white bg-rose-950/60 hover:bg-rose-900/80 border border-rose-800/60 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400 min-h-[36px]"
+                >
+                  Cancel Run
+                </button>
+              </div>
             </div>
 
             <p className="text-sm text-gray-200 font-mono pl-8">{loadingStep}</p>

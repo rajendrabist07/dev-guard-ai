@@ -5,6 +5,11 @@ import path from 'node:path';
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
 export default defineConfig({
+  oxc: {
+    jsx: {
+      runtime: 'automatic',
+    },
+  },
   test: {
     globals: true,
     environment: 'node',

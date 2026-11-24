@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import {
   ResponsiveContainer,
   BarChart,
@@ -36,11 +36,19 @@ export default function AnalyticsSection({ analytics, loading = false }: Analyti
   };
   const hasEnoughData = Boolean(analytics?.hasEnoughData && (timeline.length > 0 || toolSources.length > 0));
 
-  const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; color: string }>; label?: string }) => {
+  const CustomTooltip = ({
+    active,
+    payload,
+    label,
+  }: {
+    active?: boolean;
+    payload?: Array<{ name: string; value: number; color: string }>;
+    label?: string;
+  }) => {
     if (active && payload && payload.length) {
       return (
-        <div className="bg-gray-950/95 border border-gray-800 p-3 rounded-xl shadow-xl font-mono text-xs space-y-1.5 backdrop-blur-md">
-          <p className="text-gray-200 font-bold mb-1 border-b border-gray-800 pb-1">{label}</p>
+        <div className="bg-slate-950/95 border border-slate-800 p-3 rounded-xl shadow-xl font-mono text-xs space-y-1.5 backdrop-blur-md">
+          <p className="text-slate-200 font-bold mb-1 border-b border-slate-800 pb-1">{label}</p>
           {payload.map((entry, index) => (
             <div key={`item-${index}`} className="flex items-center justify-between gap-3">
               <span className="flex items-center gap-1.5" style={{ color: entry.color }}>
@@ -56,17 +64,23 @@ export default function AnalyticsSection({ analytics, loading = false }: Analyti
     return null;
   };
 
-  const CustomPieTooltip = ({ active, payload }: { active?: boolean; payload?: Array<{ payload: ToolSourceBreakdown }> }) => {
+  const CustomPieTooltip = ({
+    active,
+    payload,
+  }: {
+    active?: boolean;
+    payload?: Array<{ payload: ToolSourceBreakdown }>;
+  }) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       return (
-        <div className="bg-gray-950/95 border border-gray-800 p-3 rounded-xl shadow-xl font-mono text-xs space-y-1 backdrop-blur-md">
+        <div className="bg-slate-950/95 border border-slate-800 p-3 rounded-xl shadow-xl font-mono text-xs space-y-1 backdrop-blur-md">
           <p className="text-white font-bold">{data.name}</p>
-          <div className="flex items-center justify-between gap-4 text-gray-300">
+          <div className="flex items-center justify-between gap-4 text-slate-300">
             <span>Findings:</span>
             <span className="font-bold text-emerald-400">{data.count}</span>
           </div>
-          <div className="flex items-center justify-between gap-4 text-gray-300">
+          <div className="flex items-center justify-between gap-4 text-slate-300">
             <span>Share:</span>
             <span className="font-bold text-cyan-400">{data.percentage}%</span>
           </div>
@@ -82,43 +96,46 @@ export default function AnalyticsSection({ analytics, loading = false }: Analyti
         <div>
           <div className="flex items-center space-x-2">
             <TrendingUp className="w-5 h-5 text-emerald-400" />
-            <h2 className="text-lg font-bold text-white tracking-tight">Security Findings Analytics & Trends</h2>
+            <h2 className="text-lg font-bold text-white tracking-tight">Security Findings Analytics &amp; Trends</h2>
           </div>
-          <p className="text-xs text-gray-400 mt-0.5">
+          <p className="text-xs text-slate-400 mt-0.5">
             Empirical telemetry showing vulnerability frequency, AST linter flags, and review velocity over time
           </p>
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex items-center bg-gray-900 border border-gray-800 rounded-xl p-1 self-start sm:self-center">
+        <div className="flex items-center bg-slate-900 border border-slate-800 rounded-xl p-1 self-start sm:self-center">
           <button
+            type="button"
             onClick={() => setActiveChartTab('timeline')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-all ${
+            className={`px-3 py-2 min-h-[44px] rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${
               activeChartTab === 'timeline'
-                ? 'bg-emerald-500 text-black shadow-md shadow-emerald-500/20'
-                : 'text-gray-400 hover:text-white'
+                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
+                : 'text-slate-400 hover:text-white'
             }`}
           >
             <TrendingUp className="w-3.5 h-3.5" />
             <span>Timeline</span>
           </button>
           <button
+            type="button"
             onClick={() => setActiveChartTab('sources')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-all ${
+            className={`px-3 py-2 min-h-[44px] rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${
               activeChartTab === 'sources'
-                ? 'bg-emerald-500 text-black shadow-md shadow-emerald-500/20'
-                : 'text-gray-400 hover:text-white'
+                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
+                : 'text-slate-400 hover:text-white'
             }`}
           >
             <PieIcon className="w-3.5 h-3.5" />
             <span>Tool Breakdown</span>
           </button>
           <button
+            type="button"
             onClick={() => setActiveChartTab('confidence')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-all ${
+            className={`px-3 py-2 min-h-[44px] rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${
               activeChartTab === 'confidence'
-                ? 'bg-emerald-500 text-black shadow-md shadow-emerald-500/20'
-                : 'text-gray-400 hover:text-white'
+                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
+                : 'text-slate-400 hover:text-white'
             }`}
           >
             <ShieldCheck className="w-3.5 h-3.5" />
@@ -128,11 +145,11 @@ export default function AnalyticsSection({ analytics, loading = false }: Analyti
       </div>
 
       {/* Main Analytics Container */}
-      <div className="bg-gray-900/60 border border-gray-800/80 rounded-2xl p-5 sm:p-6 overflow-hidden">
+      <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 sm:p-6 overflow-hidden">
         {loading ? (
-          <div className="py-16 text-center text-gray-400 text-xs font-mono space-y-3">
+          <div className="py-16 text-center text-slate-400 text-xs font-mono space-y-3">
             <div className="w-7 h-7 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />
-            <div>Aggregating review analytics & trend data...</div>
+            <div>Aggregating review analytics &amp; trend data...</div>
           </div>
         ) : !hasEnoughData ? (
           <div className="py-12 px-4 text-center max-w-md mx-auto space-y-3">
@@ -140,10 +157,10 @@ export default function AnalyticsSection({ analytics, loading = false }: Analyti
               <ShieldCheck className="w-6 h-6" />
             </div>
             <h3 className="text-sm font-bold text-white">Collecting Telemetry for Visual Analytics</h3>
-            <p className="text-xs text-gray-400 leading-relaxed">
+            <p className="text-xs text-slate-400 leading-relaxed">
               Charts automatically plot severity trends (Critical, Warning, Info) and tool attribution (AST Linter vs OSV CVEs vs Tests) as PR reviews are processed on your connected repositories.
             </p>
-            <div className="inline-flex items-center gap-1.5 text-[11px] font-mono text-emerald-400/90 bg-emerald-950/40 border border-emerald-800/50 px-3 py-1.5 rounded-xl">
+            <div className="inline-flex items-center gap-1.5 text-xs font-mono text-emerald-400 bg-emerald-950/40 border border-emerald-800/50 px-3 py-1.5 rounded-xl">
               <Sparkles className="w-3.5 h-3.5" />
               <span>Real-time Supabase telemetry tracking enabled</span>
             </div>
@@ -153,9 +170,9 @@ export default function AnalyticsSection({ analytics, loading = false }: Analyti
             {/* Chart Render */}
             {activeChartTab === 'timeline' ? (
               <div className="space-y-3">
-                <div className="flex items-center justify-between text-xs text-gray-400 font-mono">
+                <div className="flex items-center justify-between text-xs text-slate-400 font-mono">
                   <span>Findings by Severity (30-Day Window)</span>
-                  <div className="flex items-center space-x-3 text-[11px]">
+                  <div className="flex items-center space-x-3 text-xs">
                     <span className="flex items-center gap-1">
                       <span className="w-2.5 h-2.5 rounded bg-rose-500" /> Critical
                     </span>
@@ -171,9 +188,9 @@ export default function AnalyticsSection({ analytics, loading = false }: Analyti
                 <div className="w-full h-64 sm:h-72">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={timeline} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" vertical={false} />
-                      <XAxis dataKey="date" stroke="#6b7280" fontSize={11} tickLine={false} />
-                      <YAxis stroke="#6b7280" fontSize={11} allowDecimals={false} tickLine={false} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                      <XAxis dataKey="date" stroke="#94a3b8" fontSize={11} tickLine={false} />
+                      <YAxis stroke="#94a3b8" fontSize={11} allowDecimals={false} tickLine={false} />
                       <Tooltip content={<CustomTooltip />} />
                       <Bar dataKey="critical" name="Critical" fill="#f43f5e" stackId="a" radius={[0, 0, 0, 0]} />
                       <Bar dataKey="warning" name="Warning" fill="#f59e0b" stackId="a" radius={[0, 0, 0, 0]} />
@@ -181,10 +198,33 @@ export default function AnalyticsSection({ analytics, loading = false }: Analyti
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
+
+                {/* Accessible data table for screen readers */}
+                <table className="sr-only">
+                  <caption>Findings by Severity (30-Day Timeline)</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Date</th>
+                      <th scope="col">Critical</th>
+                      <th scope="col">Warning</th>
+                      <th scope="col">Info</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {timeline.map((row, i) => (
+                      <tr key={i}>
+                        <td>{row.date}</td>
+                        <td>{row.critical}</td>
+                        <td>{row.warning}</td>
+                        <td>{row.info}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             ) : activeChartTab === 'sources' ? (
               <div className="space-y-4">
-                <div className="flex items-center justify-between text-xs text-gray-400 font-mono">
+                <div className="flex items-center justify-between text-xs text-slate-400 font-mono">
                   <span>Empirical Findings Attribution by Tool</span>
                   <span>{analytics?.totalFindingsAnalyzed ?? 0} Total Verified Findings</span>
                 </div>
@@ -203,7 +243,7 @@ export default function AnalyticsSection({ analytics, loading = false }: Analyti
                           dataKey="count"
                         >
                           {toolSources.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} stroke="#111827" strokeWidth={2} />
+                            <Cell key={`cell-${index}`} fill={entry.color} stroke="#090d16" strokeWidth={2} />
                           ))}
                         </Pie>
                         <Tooltip content={<CustomPieTooltip />} />
@@ -216,15 +256,15 @@ export default function AnalyticsSection({ analytics, loading = false }: Analyti
                     {toolSources.map((item) => (
                       <div
                         key={item.tool}
-                        className="p-3 rounded-xl bg-gray-950/60 border border-gray-800/80 flex items-center justify-between"
+                        className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 flex items-center justify-between"
                       >
                         <div className="flex items-center space-x-2.5">
-                          <span className="w-3 h-3 rounded-md flex-shrink-0" style={{ backgroundColor: item.color }} />
-                          <span className="text-xs font-semibold text-gray-200">{item.name}</span>
+                          <span className="w-3 h-3 rounded-md shrink-0" style={{ backgroundColor: item.color }} />
+                          <span className="text-xs font-semibold text-slate-200">{item.name}</span>
                         </div>
                         <div className="flex items-center space-x-3 text-xs font-mono">
-                          <span className="text-gray-400">{item.count} findings</span>
-                          <span className="font-bold px-2 py-0.5 rounded bg-gray-800" style={{ color: item.color }}>
+                          <span className="text-slate-400">{item.count} findings</span>
+                          <span className="font-bold px-2 py-0.5 rounded bg-slate-800" style={{ color: item.color }}>
                             {item.percentage}%
                           </span>
                         </div>
@@ -232,44 +272,65 @@ export default function AnalyticsSection({ analytics, loading = false }: Analyti
                     ))}
                   </div>
                 </div>
+
+                {/* Accessible Table for Screen Readers */}
+                <table className="sr-only">
+                  <caption>Tool Breakdown Statistics</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Tool Name</th>
+                      <th scope="col">Count</th>
+                      <th scope="col">Percentage</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {toolSources.map((item, i) => (
+                      <tr key={i}>
+                        <td>{item.name}</td>
+                        <td>{item.count}</td>
+                        <td>{item.percentage}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             ) : (
               <div className="space-y-4">
-                <div className="flex items-center justify-between text-xs text-gray-400 font-mono">
+                <div className="flex items-center justify-between text-xs text-slate-400 font-mono">
                   <span>Finding Confidence Distribution (Corroboration-Calibrated)</span>
                   <span>Selective Autonomy Telemetry</span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div className="p-4 rounded-xl bg-gray-950/60 border border-gray-800/80 space-y-2">
+                  <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 space-y-2">
                     <div className="flex items-center justify-between text-xs text-emerald-400 font-semibold">
-                      <span>🔥 High Confidence</span>
+                      <span>High Confidence</span>
                       <span className="font-mono text-emerald-300 font-bold">{confidence.highPercentage}%</span>
                     </div>
                     <div className="text-2xl font-bold text-white font-mono">{confidence.highCount}</div>
-                    <p className="text-[11px] text-gray-400">
+                    <p className="text-xs text-slate-400">
                       Corroborated by 2+ independent tools or deterministic CVE lookups.
                     </p>
                   </div>
 
-                  <div className="p-4 rounded-xl bg-gray-950/60 border border-gray-800/80 space-y-2">
+                  <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 space-y-2">
                     <div className="flex items-center justify-between text-xs text-cyan-400 font-semibold">
-                      <span>⚖️ Medium Confidence</span>
+                      <span>Medium Confidence</span>
                       <span className="font-mono text-cyan-300 font-bold">{confidence.mediumPercentage}%</span>
                     </div>
                     <div className="text-2xl font-bold text-white font-mono">{confidence.mediumCount}</div>
-                    <p className="text-[11px] text-gray-400">
+                    <p className="text-xs text-slate-400">
                       Single-tool critical AST pattern match with direct fix recommendation.
                     </p>
                   </div>
 
-                  <div className="p-4 rounded-xl bg-gray-950/60 border border-gray-800/80 space-y-2">
+                  <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 space-y-2">
                     <div className="flex items-center justify-between text-xs text-amber-400 font-semibold">
-                      <span>🔍 Low Confidence (Hedged)</span>
+                      <span>Low Confidence (Hedged)</span>
                       <span className="font-mono text-amber-300 font-bold">{confidence.lowPercentage}%</span>
                     </div>
                     <div className="text-2xl font-bold text-white font-mono">{confidence.lowCount}</div>
-                    <p className="text-[11px] text-gray-400">
+                    <p className="text-xs text-slate-400">
                       Single-source static heuristic. Explicitly routed for human engineer judgment.
                     </p>
                   </div>
