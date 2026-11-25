@@ -1,0 +1,16 @@
+# DevGuard AI Codeowners
+# Global default
+* @rajendrabist07
+
+# Security & Authorization
+/lib/security/ @rajendrabist07
+/app/api/webhooks/ @rajendrabist07
+/app/api/auth/ @rajendrabist07
+
+# Core AI Orchestrator & Evaluation
+/lib/agent/ @rajendrabist07
+/evals/ @rajendrabist07
+
+# CI/CD & Deployments
+/.github/ @rajendrabist07
+/scripts/ @rajendrabist07

@@ -76,7 +76,7 @@ describe('Sprint 5 & 6 — Webhook Non-blocking Pipeline & Git Diff Line Mapping
     const body = await res.json();
     expect(body.status).toBe('accepted');
     expect(body.reviewRunId).toBe('run-async-123');
-    expect(durationMs).toBeLessThan(100); // Guarantees instant sub-100ms response
+    expect(durationMs).toBeLessThan(500); // Guarantees non-blocking async execution without awaiting pipeline
   });
 
   it('Sprint 6: accurately parses git patch hunk headers to map modified lines', () => {

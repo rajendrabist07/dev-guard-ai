@@ -106,9 +106,74 @@ export async function copyMarkdownReport(data: ReportData): Promise<boolean> {
 }
 
 /**
- * Generates and downloads a clean, professional PDF compliance report.
+ * Generates a structured JSON compliance report.
  */
-export function downloadPdfReport(data: ReportData) {
+export function generateJSONReport(data: ReportData): string {
+  const criticalCount = data.findings.filter((f) => f.severity === 'critical').length;
+  const warningCount = data.findings.filter((f) => f.severity === 'warning').length;
+  const infoCount = data.findings.filter((f) => f.severity === 'info').length;
+
+  return JSON.stringify(
+    {
+      devguard_report_version: '1.0.0',
+      title: data.title,
+      pr_number: data.prNumber,
+      author: data.author,
+      commit_sha: data.commitSha,
+      timestamp: data.timestamp || new Date().toISOString(),
+      status: data.status || (criticalCount > 0 ? 'failed' : 'passed'),
+      review_type: data.reviewType || 'full_review',
+      tool_iterations: data.toolCallsCount || 0,
+      provider: data.providerUsed || 'autonomous-router',
+      metrics: {
+        critical: criticalCount,
+        warning: warningCount,
+        info: infoCount,
+        total: data.findings.length,
+      },
+      findings: data.findings,
+      summary: data.summary,
+    },
+    null,
+    2
+  );
+}
+
+/**
+ * Triggers a browser download of the JSON report file.
+ */
+export function downloadJSONReport(data: ReportData) {
+  const content = generateJSONReport(data);
+  const blob = new Blob([content], { type: 'application/json;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  const sanitizedTitle = (data.title || 'review-report').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+  link.href = url;
+  link.download = `devguard-report-${sanitizedTitle}.json`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Copies the JSON report to the user's clipboard.
+ */
+export async function copyJSONReport(data: ReportData): Promise<boolean> {
+  try {
+    const content = generateJSONReport(data);
+    await navigator.clipboard.writeText(content);
+    return true;
+  } catch (err) {
+    console.error('Failed to copy JSON report:', err);
+    return false;
+  }
+}
+
+/**
+ * Generates a jsPDF Document instance for the compliance report.
+ */
+export function generatePdfReport(data: ReportData): jsPDF {
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
@@ -305,6 +370,18 @@ export function downloadPdfReport(data: ReportData) {
     doc.text('https://dev-guard-ai.vercel.app', pageWidth - margin - 40, pageHeight - 8);
   }
 
+  return doc;
+}
+
+/**
+ * Generates and triggers browser download of the PDF compliance report.
+ */
+export function downloadPdfReport(data: ReportData): void {
+  const doc = generatePdfReport(data);
   const sanitizedTitle = (data.title || 'review-report').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
   doc.save(`devguard-report-${sanitizedTitle}.pdf`);
 }
+
+// Aliases for casing flexibility
+export const generatePDFReport = generatePdfReport;
+export const downloadPDFReport = downloadPdfReport;

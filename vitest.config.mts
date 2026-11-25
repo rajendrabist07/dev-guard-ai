@@ -14,6 +14,12 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     testTimeout: 15000,
+    pool: 'forks',
+    forks: {
+      singleFork: true,
+    },
+    include: ['__tests__/**/*.test.{ts,tsx}'],
+    exclude: ['node_modules/**', 'e2e/**', '.next/**'],
     alias: {
       '@': path.resolve(__dirname, './'),
     },
@@ -21,12 +27,12 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
       include: [
-        'lib/agent/**/*.ts',
-        'lib/github/**/*.ts',
-        'lib/badge/**/*.ts',
-        'lib/reports/**/*.ts',
+        'lib/**/*.ts',
       ],
-      exclude: ['node_modules/**', '**/*.d.ts', '**/*.test.ts'],
+      exclude: ['node_modules/**', '**/*.d.ts', '**/*.test.ts', 'lib/db/types.ts'],
+      thresholds: {
+        lines: 85,
+      },
     },
   },
 });

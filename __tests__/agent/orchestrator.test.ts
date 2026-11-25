@@ -94,4 +94,145 @@ describe('Agent Orchestrator Loop (lib/agent/orchestrator.ts)', () => {
     expect(result.findings.length).toBe(0);
     expect(result.providerUsed).toBeDefined();
   });
+
+  it('executes native tool calling loop for analyze_code, scan_dependencies, run_checks, and read_file', async () => {
+    let callCount = 0;
+    const mockProvider = {
+      providerLabel: 'Mock-Tool-Caller',
+      modelId: 'mock-model-1',
+      complete: vi.fn().mockResolvedValue({
+        content: JSON.stringify({
+          summary: 'Native tool calling review synthesized successfully.',
+          prioritizedFindingIds: [],
+          explanations: [],
+          suggestedFixes: [],
+        }),
+        inputTokens: 100,
+        outputTokens: 50,
+        totalTokens: 150,
+        durationMs: 25,
+        providerLabel: 'Mock-Tool-Caller',
+        modelId: 'mock-model-1',
+      }),
+      completeWithTools: vi.fn().mockImplementation(async () => {
+        callCount++;
+        if (callCount === 1) {
+          return {
+            content: '',
+            inputTokens: 100,
+            outputTokens: 50,
+            totalTokens: 150,
+            durationMs: 40,
+            providerLabel: 'Mock-Tool-Caller',
+            modelId: 'mock-model-1',
+            toolCalls: [
+              {
+                id: 'call-1',
+                name: 'analyze_code',
+                arguments: { filePath: 'app.ts', code: 'const sql = "SELECT * FROM users WHERE id = " + id;' },
+              },
+              {
+                id: 'call-2',
+                name: 'scan_dependencies',
+                arguments: { dependencies: { axios: '0.19.0' } },
+              },
+            ],
+          };
+        }
+        if (callCount === 2) {
+          return {
+            content: '',
+            inputTokens: 100,
+            outputTokens: 50,
+            totalTokens: 150,
+            durationMs: 30,
+            providerLabel: 'Mock-Tool-Caller',
+            modelId: 'mock-model-1',
+            toolCalls: [
+              {
+                id: 'call-3',
+                name: 'run_checks',
+                arguments: { checkType: 'security' },
+              },
+              {
+                id: 'call-4',
+                name: 'read_file',
+                arguments: { filePath: 'app.ts', startLine: 1, endLine: 10 },
+              },
+              {
+                id: 'call-5',
+                name: 'unknown_custom_tool',
+                arguments: {},
+              },
+            ],
+          };
+        }
+        return {
+          content: 'Done analyzing',
+          inputTokens: 50,
+          outputTokens: 20,
+          totalTokens: 70,
+          durationMs: 10,
+          providerLabel: 'Mock-Tool-Caller',
+          modelId: 'mock-model-1',
+          toolCalls: [],
+        };
+      }),
+    };
+
+    const fullFiles = new Map<string, string>();
+    fullFiles.set('app.ts', 'const sql = "SELECT * FROM users WHERE id = " + id;\nconsole.log(sql);');
+
+    const result = await runAgentOrchestrator(
+      '+ const sql = "SELECT * FROM users WHERE id = " + id;',
+      ['app.ts'],
+      'test-native-tooling-run',
+      undefined,
+      {
+        customProvider: mockProvider as any,
+        fullFiles,
+      }
+    );
+
+    expect(result.toolCallsCount).toBeGreaterThanOrEqual(4);
+    expect(result.trace.some((t) => t.tool === 'analyze_code')).toBe(true);
+    expect(result.trace.some((t) => t.tool === 'scan_dependencies')).toBe(true);
+    expect(result.trace.some((t) => t.tool === 'run_checks')).toBe(true);
+    expect(result.trace.some((t) => t.tool === 'read_file')).toBe(true);
+  });
+
+  it('gracefully falls back to deterministic router when native tool calling encounters an exception', async () => {
+    const explodingProvider = {
+      providerLabel: 'Exploding-Provider',
+      modelId: 'exploding-1',
+      complete: vi.fn().mockResolvedValue({
+        content: JSON.stringify({
+          summary: 'Fallback review synthesized.',
+          prioritizedFindingIds: [],
+          explanations: [],
+          suggestedFixes: [],
+        }),
+        inputTokens: 100,
+        outputTokens: 50,
+        totalTokens: 150,
+        durationMs: 25,
+        providerLabel: 'Exploding-Provider',
+        modelId: 'exploding-1',
+      }),
+      completeWithTools: vi.fn().mockRejectedValue(new Error('LLM Gateway Failure')),
+    };
+
+    const result = await runAgentOrchestrator(
+      '+ const q = "SELECT * FROM t WHERE id = " + x;',
+      ['query.ts'],
+      'test-fallback-run',
+      undefined,
+      {
+        customProvider: explodingProvider as any,
+      }
+    );
+
+    expect(result.findings.length).toBeGreaterThanOrEqual(1);
+    expect(result.toolCallsCount).toBeGreaterThanOrEqual(1);
+  });
 });

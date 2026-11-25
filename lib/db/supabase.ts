@@ -26,24 +26,34 @@ export const supabase = supabaseUrl && supabaseAnonKey ? createClient(supabaseUr
 
 export const supabaseAdmin = supabaseUrl && supabaseServiceKey ? createClient(supabaseUrl, supabaseServiceKey) : null;
 
+// Test override client
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let customAdminClient: any = null;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function setSupabaseAdminForTesting(client: any) {
+  customAdminClient = client;
+}
+
 // In-memory simulation cache fallback to ensure simulation always resolves smoothly
 export const inMemorySimulations = new Map<string, { run: DisplayReviewRun; findings: Finding[] }>();
 export const inMemoryTryRuns = new Map<string, TryRun>();
 
 export function getSupabaseAdmin() {
-  return supabaseAdmin;
+  return customAdminClient || supabaseAdmin;
 }
 
 /**
  * Pings Supabase PostgreSQL to determine live connection health.
  */
 export async function pingDatabase(): Promise<{ ok: boolean; configured: boolean; latencyMs?: number; error?: string }> {
-  if (!supabaseAdmin) {
+  const db = getSupabaseAdmin();
+  if (!db) {
     return { ok: false, configured: false };
   }
   const start = Date.now();
   try {
-    const { error } = await supabaseAdmin.from('installations').select('id').limit(1);
+    const { error } = await db.from('installations').select('id').limit(1);
     if (error) {
       return { ok: false, configured: true, latencyMs: Date.now() - start, error: error.message };
     }
@@ -75,11 +85,12 @@ export function createUserClient(token?: string) {
 }
 
 function requireSupabaseAdmin() {
-  if (!supabaseAdmin) {
+  const db = getSupabaseAdmin();
+  if (!db) {
     throw new Error('Supabase server environment variables are not configured.');
   }
 
-  return supabaseAdmin;
+  return db;
 }
 
 import { getGitHubAppInstallUrl } from '@/lib/github/config';
@@ -268,7 +279,8 @@ export async function getDashboardData(accessibleRepoIds?: string[]): Promise<Da
     cacheHitRate: cacheStats.hitRatePercentage,
   };
 
-  if (!supabaseAdmin) {
+  const db = getSupabaseAdmin();
+  if (!db) {
     return {
       repos: [],
       reviewRuns: [],
@@ -1048,9 +1060,10 @@ export async function createTryRun(input: {
     console.warn('Redis try_runs persistence fallback:', err);
   }
 
-  if (supabaseAdmin) {
+  const db = getSupabaseAdmin();
+  if (db) {
     try {
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await db
         .from('try_runs')
         .insert({
           id: tryId.includes('-') && tryId.length >= 32 ? tryId : undefined,
@@ -1117,9 +1130,10 @@ export async function getTryRunById(id: string): Promise<TryRun | null> {
   }
 
   // Tier 3: Query Supabase PostgreSQL database
-  if (supabaseAdmin) {
+  const db = getSupabaseAdmin();
+  if (db) {
     try {
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await db
         .from('try_runs')
         .select('*')
         .eq('id', id)
@@ -1160,9 +1174,10 @@ export async function getTryRunsBySession(sessionId: string, limit = 20): Promis
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     .slice(0, limit);
 
-  if (supabaseAdmin) {
+  const db = getSupabaseAdmin();
+  if (db) {
     try {
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await db
         .from('try_runs')
         .select('*')
         .eq('session_id', sessionId)
@@ -1175,7 +1190,7 @@ export async function getTryRunsBySession(sessionId: string, limit = 20): Promis
       }
 
       if (data && data.length > 0) {
-        const dbRuns: TryRun[] = data.map((d) => ({
+        const dbRuns: TryRun[] = (data as unknown as TryRun[]).map((d) => ({
           id: d.id,
           session_id: d.session_id,
           input_type: d.input_type,

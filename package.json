@@ -13,10 +13,12 @@
     "test:reports": "npx tsx scripts/verify-export-reports.ts",
     "test:transparency": "npx tsx scripts/verify-model-transparency.ts",
     "test:badge": "npx tsx scripts/verify-badge-api.ts",
+    "test:e2e": "playwright test",
     "eval": "npx tsx evals/run-eval.ts",
     "eval:gate": "npx tsx evals/run-eval.ts --gate",
     "eval:promote": "npx tsx evals/run-eval.ts --update-baseline",
-    "eval:real": "npx tsx evals/run-real-world-eval.ts"
+    "eval:real": "npx tsx evals/run-real-world-eval.ts",
+    "ci:all": "npm run typecheck && npm run lint && npm run test:coverage && npm run eval:gate && npm run build"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
@@ -43,8 +45,10 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
     "@emnapi/core": "^1.11.3",
     "@emnapi/runtime": "^1.11.3",
+    "@playwright/test": "^1.65.1",
     "@tailwindcss/postcss": "^4.0.0",
     "@types/node": "^26.5.1",
     "@types/react": "^19.0.8",
@@ -53,7 +57,7 @@
     "@vitest/ui": "^4.1.11",
     "eslint": "^9.19.0",
     "eslint-config-next": "^15.5.25",
-    "postcss": "^8.5.1",
+    "postcss": "^8.5.33",
     "prettier": "^3.4.2",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.3",

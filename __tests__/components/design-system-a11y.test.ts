@@ -10,17 +10,19 @@ import { ErrorState } from '@/components/ui/ErrorState';
 describe('Phase 7 Frontend Design System & Accessibility Primitives', () => {
   describe('Button Accessibility', () => {
     it('creates button element with 44px min touch target and focus ring', () => {
-      const el = React.createElement(Button, { children: 'Click me' });
+      const el = React.createElement(Button, null, 'Click me');
       // Render forwardRef component
-      const rendered = (Button as any).render(el.props, null);
+      const btn = Button as unknown as { render: (props: unknown, ref: unknown) => { props: { className: string } } };
+      const rendered = btn.render(el.props, null);
       expect(rendered.props.className).toContain('min-h-[44px]');
       expect(rendered.props.className).toContain('focus-visible:ring-2');
       expect(rendered.props.className).toContain('focus-visible:ring-emerald-400');
     });
 
     it('sets aria-busy and disabled when in loading state', () => {
-      const el = React.createElement(Button, { children: 'Submit', isLoading: true });
-      const rendered = (Button as any).render(el.props, null);
+      const el = React.createElement(Button, { isLoading: true }, 'Submit');
+      const btn = Button as unknown as { render: (props: unknown, ref: unknown) => { props: { 'aria-busy': boolean; disabled: boolean } } };
+      const rendered = btn.render(el.props, null);
       expect(rendered.props['aria-busy']).toBe(true);
       expect(rendered.props.disabled).toBe(true);
     });

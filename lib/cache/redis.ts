@@ -9,6 +9,10 @@ if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) 
   });
 }
 
+export function setRedisClientForTesting(client: Redis | null): void {
+  redisClient = client;
+}
+
 // In-memory cache fallback for local/offline execution
 const memoryCache = new Map<string, { value: unknown; expiresAt: number }>();
 

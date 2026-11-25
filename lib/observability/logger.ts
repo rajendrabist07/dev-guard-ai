@@ -132,7 +132,7 @@ export async function fetchStructuredLogs(limit = 50): Promise<StructuredLogEntr
           .limit(limit);
 
         if (!error && data && data.length > 0) {
-          return data.map((d) => ({
+          return (data as unknown as Array<{ id: string; created_at: string; level: LogLevel; message: string; error?: string; context?: LogContext }>).map((d) => ({
             id: d.id,
             timestamp: d.created_at,
             level: d.level as LogLevel,
