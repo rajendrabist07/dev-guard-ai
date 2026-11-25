@@ -1,225 +1,142 @@
 # DevGuard AI
 
-[![CI Pipeline](https://github.com/rajendrabist07/dev-guard-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/rajendrabist07/dev-guard-ai/actions/workflows/ci.yml)
-[![Eval Accuracy Gate](https://dev-guard-ai.vercel.app/api/badge/eval-score)](evals/eval-results.json)
-[![Technical Case Study](https://img.shields.io/badge/Read-Technical_Case_Study-indigo)](docs/case-study.md)
-[![License: MIT](https://img.shields.io/badge/License-MIT-emerald)](LICENSE)
-
-DevGuard AI is an automated code review service that analyzes GitHub pull requests by executing static pattern analysis, dependency vulnerability scanning, and code diff invariant verification before synthesizing review guidance with an AI model. Rather than relying on single-shot LLM prompts on raw diffs, it invokes diagnostic tools to collect concrete evidence, surfaces suggested inline code fixes, and records structured execution traces.
-
-Read the technical analysis: [Building an Eval-Gated, Evidence-Backed AI Code Review Agent](docs/case-study.md), detailing tool execution, regression testing gates, calibration against open-source pull requests, and complexity routing.
+DevGuard AI is an autonomous GitHub Pull Request security-review agent built on Next.js 15, Supabase Postgres + Auth, Upstash Redis & QStash, TypeScript Compiler AST analysis, OSV.dev lockfile scanning, and Groq (`llama-3.3-70b-versatile`) with Google Gemini (`gemini-2.0-flash`) fallback. Every security finding and severity originates strictly from deterministic static analyzers and vulnerability databases—never hallucinated by an LLM—while the AI layer prioritizes, explains, and suggests remediation patches anchored to modified diff hunks.
 
 ---
 
-## Architecture
+## 60-Second Quickstart
 
-### GitHub Webhook Flow
+Try the live analyzer immediately without installing the GitHub App or configuring credentials:
 
-```mermaid
-flowchart TD
-    subgraph GitHub ["GitHub Platform"]
-        PR["Pull Request Event (opened / synchronize)"]
-        Review["PR Review Comments & Inline Patches"]
-    end
+1. **Interactive Web Playground:** Visit `/try` (or run `npm run dev` and open `http://localhost:3000/try`) to analyze sample diffs or paste custom TypeScript/JavaScript code.
+2. **API / OpenAPI 3.1 Docs:** Browse interactive endpoints at `/api/docs` or fetch the machine-readable OpenAPI 3.1.0 spec at `/api/docs.json`.
+3. **Local CI Verification:**
 
-    subgraph Ingestion ["Webhook Receiver & Verification"]
-        WH["POST /api/webhooks/github"]
-        Auth["HMAC-SHA256 Signature Verification"]
-        Dedupe["Idempotency Check (repo_id + pr_number + commit_sha)"]
-    end
-
-    subgraph Orchestration ["Agent Orchestrator (lib/agent/orchestrator.ts)"]
-        DiffFilter["Diff Scope & File Classifier"]
-        Linter["Static Pattern Checker (runLinter)"]
-        Deps["OSV.dev Vulnerability Query (scanDependencies)"]
-        Tests["Security Invariant Validator (runTests)"]
-        Synthesis["Multi-Tier Model Synthesis (Groq / Gemini / Fallback)"]
-    end
-
-    subgraph Storage ["Database & Cache"]
-        Redis[("Upstash Redis Cache (24h TTL)")]
-        DB[("Supabase Postgres (review_runs, findings, system_logs)")]
-    end
-
-    PR --> WH
-    WH --> Auth
-    Auth --> Dedupe
-    Dedupe -->|New Unique Commit| DiffFilter
-    DiffFilter -->|Code Files| Linter
-    DiffFilter -->|Manifest Changes| Deps
-    DiffFilter -->|Executable Logic| Tests
-    Deps <-->|Key: osv:npm:pkg:ver| Redis
-    Linter --> Synthesis
-    Deps --> Synthesis
-    Tests --> Synthesis
-    Synthesis --> DB
-    Synthesis -->|Octokit REST API| Review
-```
-
-### Interactive Playground (`/try`) Flow
-
-```mermaid
-flowchart TD
-    User["Developer in Browser (/try)"]
-    API["POST /api/try"]
-    RateLimit["Rate Limiter (5 req / 10 min per IP)"]
-    Zod["Zod Payload Validation"]
-    Orchestrator["Agent Orchestrator Pipeline"]
-    SSE["Server-Sent Events (SSE) Stream"]
-    ResultPage["Shareable Review (/try/result/[id])"]
-
-    User -->|Submit Diff or Sample| API
-    API --> RateLimit
-    RateLimit --> Zod
-    Zod --> Orchestrator
-    Orchestrator -->|Live Step Progress| SSE
-    SSE --> User
-    Orchestrator -->|Persist Result (30-day retention)| ResultPage
+```bash
+git clone https://github.com/rajendrabist07/dev-guard-ai.git
+cd dev-guard-ai
+npm ci
+npm run ci:all
 ```
 
 ---
 
-## Design Decisions and Tradeoffs
+## Architecture Overview
 
-### 1. Tool-Calling with Verification vs. Single-Shot LLM Generation
-- **Decision**: The LLM does not generate security findings directly from unverified raw diff text. Instead, deterministic diagnostic tools (`runLinter` for static regex/pattern analysis, `scanDependencies` for OSV.dev vulnerabilities, `runTests` for static security invariant assertions) detect issues first. The model is used to synthesize structured tool outputs into developer guidance.
-- **Tradeoff**: Running tools adds small pipeline latency (~1–2 seconds), but eliminates hallucinations. A finding is only reported if a static pattern matched, an OSV.dev record matched, or an invariant check failed.
+```mermaid
+flowchart LR
+    GH["GitHub Pull Request"] -->|HMAC-SHA256 Webhook| WH["/api/webhooks/github"]
+    GHA["devguard-action (CI)"] -->|OIDC JWT| ING["/api/ingest"]
+    WH -->|Dedupe + Insert queued| DB[(Supabase Postgres)]
+    WH -->|Publish Job| QS["Upstash QStash"]
+    QS -->|Signed Callback| WK["/api/jobs/review-worker"]
+    WK --> ORCH["Agent Orchestrator"]
+    ORCH --> AST["TS AST Analyzer (9 CWEs)"]
+    ORCH --> OSV["OSV Lockfile Scanner + Redis"]
+    ORCH --> LLM["Groq / Gemini Resilient Provider"]
+    ORCH -->|Inline Annotations| GH
+    WK -->|Update State + Findings| DB
+    CRON["Vercel Cron Watchdog"] -->|Recover Stuck Runs| DB
+```
 
-### 2. Multi-Tier Model Fallback (Groq Llama 3.3 70B -> Gemini 2.0 Flash -> Deterministic Engine)
-- **Decision**: Primary inference runs on Groq's `llama-3.3-70b-versatile`. If Groq returns an HTTP 429 rate limit or service error, the pipeline fails over to Google's `gemini-2.0-flash`. If external APIs are unreachable, an offline rule-based deterministic synthesizer formats the review report.
-- **Tradeoff**: Supporting multiple providers requires maintaining unified output schemas across different response formats. In return, review runs never crash due to provider downtime or quota exhaustion.
-
-### 3. Execution Safeguard Cap (MAX_ITERATIONS = 5)
-- **Decision**: The orchestrator enforces a hard cap of 5 tool calls per review run.
-- **Tradeoff**: For extremely large pull requests touching dozens of distinct file categories, execution is bounded to prevent runaway compute spend or memory pressure.
-
-### 4. Upstash Redis Caching for OSV.dev Queries
-- **Decision**: Dependency vulnerability query results are cached in Redis using keys formatted as `osv:npm:${packageName}:${version}` with a 24-hour TTL.
-- **Tradeoff**: A newly published CVE disclosed within the 24-hour window will not be reflected until the TTL expires or cache invalidates. In exchange, identical dependencies across multiple PRs avoid redundant HTTP requests, cutting dependency analysis latency to sub-millisecond speeds.
-
----
-
-## Evaluation Results and Validation
-
-DevGuard AI is evaluated across two benchmark suites: a 20-case golden CI regression suite (`evals/dataset.json`), and a 20-case validation suite (`evals/run-real-world-eval.ts`) composed of pull request diffs from 5 open-source repositories (`shadcn-ui/taxonomy`, `calcom/cal.com`, `dubinc/dub`, `novuhq/novu`, `t3-oss/create-t3-app`).
-
-### 1. Golden Benchmark (CI Regression Gate)
-
-| Metric | Score | Target / Threshold | Description |
-| :--- | :--- | :--- | :--- |
-| **Tool Selection Precision** | **100%** | >= 98% (CI Gate) | Ratio of correctly invoked tools to total tools called |
-| **Tool Selection Recall** | **100%** | >= 98% (CI Gate) | Ratio of expected tools invoked to total expected tools |
-| **Tool Selection F1 Score** | **100%** | >= 98% (CI Gate) | Harmonic mean of precision and recall |
-| **Severity Accuracy** | **100%** | >= 98% (CI Gate) | Exact match on expected severity (`critical`, `warning`, `none`) |
-| **Wasted Tool Call Rate** | **0%** | <= 2% (CI Gate) | Tools invoked unnecessarily on non-relevant diffs |
-| **Docs-Only Efficiency Gate** | **PASSED** | 100% | 0 tools called on Markdown / docs PRs |
-
-### 2. Validation on Open-Source Diffs
-
-Evaluated across 20 pull request diffs from external repositories:
-
-| Metric | Score | Description |
-| :--- | :--- | :--- |
-| **Validation Precision** | **88.9%** | 8 true positives caught, 1 false positive out of 9 flags |
-| **Validation Recall** | **100%** | 8/8 verified vulnerabilities identified across sample |
-| **False Positive Rate** | **8.3%** | 1 benign change flagged out of 12 clean PRs |
-| **Overall Accuracy** | **95.0%** | 19/20 pull requests classified with exact fidelity |
-
-Detailed case-by-case classifications and reviewer ground-truth logs are committed in [`evals/real-world-results.json`](evals/real-world-results.json).
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for full component and sequence diagrams.
 
 ---
 
-## Security Architecture
+## Supported Checks & Honest Limitations
 
-### 1. Zero-Trust Authentication and Database Row-Level Security
-- **Cryptographic Identity Verification**: User identity is derived strictly from verified Supabase session tokens or OAuth provider data (`user.identities`). All client-supplied identity headers (`x-account-login`, `x-user-id`, `x-github-installation-id`) are stripped at the edge.
-- **Database Row-Level Security**: PostgreSQL RLS is enabled across all application tables. User-initiated read operations use user-scoped clients, ensuring strict multi-tenant isolation.
-- **Single Authorization Layer**: Every protected endpoint enforces `requireUser()`, `requireRepoAccess(repoId)`, and `requireReviewRunAccess(runId)` before executing logic.
+### What DevGuard AI Checks
+- **TypeScript / JavaScript AST Security Rules (`lib/agent/tools/ast-analyzer.ts`):** 9 deterministic rules powered by the TypeScript Compiler API (`typescript`): SQL injection, command injection, tainted request input flow, SSRF, unhandled async rejections, hardcoded secrets, insecure cookies/JWT configuration, `dangerouslySetInnerHTML`, and weak cryptography.
+- **Lockfile Dependency Scanning (`lib/agent/tools/deps-scan.ts`):** Exact version resolution for `package-lock.json`, `yarn.lock`, and `pnpm-lock.yaml` queried in batches against `https://api.osv.dev/v1/querybatch` with 24-hour Upstash Redis caching and offline fallback for critical CVEs.
+- **Optional CI Execution (`actions/devguard-action`):** Repositories that install the companion GitHub Action run Semgrep, OSV-Scanner, and the repository's own test suite inside GitHub Actions, authenticating results to `/api/ingest` via GitHub OIDC.
 
-### 2. Webhook Ingestion Hardening
-- **Timing-Safe HMAC Verification**: Validates `X-Hub-Signature-256` using `crypto.timingSafeEqual` with raw request body buffers before JSON parsing.
-- **Anti-Replay Delivery Protection**: `X-GitHub-Delivery` UUIDs are stored in a dedicated `webhook_deliveries` table with a unique constraint to reject replayed deliveries.
-- **Database Idempotency**: Review run creation uses a PostgreSQL `UNIQUE(repo_id, pr_number, commit_sha)` constraint with `ON CONFLICT DO NOTHING`.
-
-### 3. Prompt Boundary Tagging and Tool Consistency Guard
-- **Boundary Enclosure**: Untrusted pull request diffs and titles are wrapped in explicit boundary delimiters.
-- **Empirical Tool Consistency Guard**: In [`lib/agent/llm.ts`](lib/agent/llm.ts), `verifyToolConsistencyGuard` cross-verifies model summaries against deterministic tool outputs. If empirical tools detect security findings but the synthesized output proclaims an unearned approval ("LGTM" / "no issues found"), the output is overruled and flagged for human review.
-
-### 4. Outbound Network & SSRF Defenses
-- Outbound requests in dependency tooling are restricted to an allowlist of external hosts (`api.osv.dev`). Package names extracted from manifests are validated against the official npm naming regex before URL or cache key construction.
+### Honest Limitations
+- **AST Language Scope:** In-app AST analysis currently parses TypeScript and JavaScript (`.ts`, `.tsx`, `.js`, `.jsx`). Other languages rely on `devguard-action` (Semgrep) if configured.
+- **In-App Test Execution:** The web app itself does **not** execute arbitrary repository test suites in a sandbox; PR comments explicitly report `tests: not executed — install devguard-action to enable` unless CI results are ingested via `/api/ingest`.
+- **File & Diff Caps:** GitHub PR fetches cap analyzed non-binary files (`MAX_FILES = 15`, `MAX_FILE_SIZE = 100KB`); `/try` caps payloads at `100KB` and `25` files.
+- **Provider Outage Degradation:** If both Groq and Gemini fail or the daily LLM budget circuit breaker trips, DevGuard AI still posts deterministic AST and OSV findings with a template summary.
 
 ---
 
-## Cost and Telemetry Tracking
+## Security Model Summary
 
-- **Dynamic Token Cost Tracking**: Every review run records input/output token usage. Costs are computed dynamically using published provider pricing centralized in [`lib/config/models.ts`](lib/config/models.ts).
-- **Latency Percentiles**: End-to-end turnaround times are recorded in database timestamps (`started_at`, `completed_at`), computing p50 and p95 percentiles from real runs.
-- **Truthful Dashboard States**: When 0 review runs exist, dashboard metrics display "No data yet" rather than placeholder or estimated numbers.
+- **Zero-Trust Auth:** Identity is derived exclusively from verified Supabase Auth sessions (`supabase.auth.getUser()`) and `user.identities` (`github`), never from `user_metadata` or client-supplied headers (`middleware.ts` strips `x-user-id`, `x-account-login`, and `x-github-installation-id`).
+- **Tenant Isolation:** Row-Level Security (RLS) policies in Postgres (`db/migrations/`) and explicit authorization helpers (`requireUser`, `requireRepoAccess`, `requireReviewRunAccess`) isolate tenants.
+- **Webhook & Queue Integrity:** Timing-safe HMAC-SHA256 verification (`crypto.timingSafeEqual`), `x-github-delivery` replay deduplication, `ON CONFLICT DO NOTHING` run creation, and cryptographic QStash signature verification.
+- **Prompt Injection Defense:** Untrusted PR diffs and titles are wrapped in per-request random nonce boundaries (`<<<UNTRUSTED_CONTENT_NONCE_...>>>`); LLM outputs are Zod-validated with referential finding-ID checks so the model cannot create, delete, or downgrade deterministic findings.
+
+Full threat model and test evidence: [docs/SECURITY.md](docs/SECURITY.md).
+
+---
+
+## Evaluation Results
+
+Evaluated via `npm run eval:gate` across `N = 64` cases (`32` development cases in `evals/dev-dataset.json` + `32` held-out cases in `evals/held-out-dataset.json`, including `33` adversarial prompt-injection payloads):
+
+| Metric | Score | Notes |
+| :--- | :---: | :--- |
+| **Severity Accuracy** | **100%** (64/64) | 95% Wilson Score CI: `[94.34%, 100%]` |
+| **Tool Selection F1-Score** | **100%** | Precision: 100%, Recall: 100% |
+| **Wasted Tool Call Rate** | **0%** | Docs-only PRs fast-pathed (100% skipped) |
+| **Adversarial Injection Resistance** | **100%** | 0/34 successful manipulations |
+
+Methodology and provenance: [evals/README.md](evals/README.md).
 
 ---
 
 ## Local Setup
 
 ### Prerequisites
-- Node.js 18+
-- npm 9+
+- Node.js 22 LTS (`>= 20`)
+- npm 10+
 
-### 1. Clone & Install
+### Installation & Verification
 ```bash
-git clone https://github.com/rajendrabist07/dev-guard-ai.git
-cd dev-guard-ai
-npm install
-```
-
-### 2. Configure Environment Variables
-Copy `.env.example` to `.env.local`:
-```bash
+npm ci
 cp .env.example .env.local
-```
-
-Required keys:
-```env
-# Database
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_ANON_KEY=your_supabase_anon_key
-SUPABASE_SERVICE_KEY=your_supabase_service_role_key
-
-# AI Providers (At least one required)
-GROQ_API_KEY=your_groq_api_key
-GEMINI_API_KEY=your_gemini_api_key
-
-# GitHub App (Required for live PR reviews)
-GITHUB_APP_ID=your_app_id
-GITHUB_APP_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----"
-GITHUB_WEBHOOK_SECRET=your_webhook_secret
-
-# Optional: Upstash Redis (Falls back to in-memory cache if omitted)
-UPSTASH_REDIS_REST_URL=https://your-redis.upstash.io
-UPSTASH_REDIS_REST_TOKEN=your_redis_token
-
-# Optional: Sentry (Observability)
-NEXT_PUBLIC_SENTRY_DSN=your_sentry_dsn
-```
-
-### 3. Run Development Server
-```bash
+# Populate required keys in .env.local (see Environment Variables below)
 npm run dev
 ```
 
-### 4. Run Test & Evaluation Suites
+### Full Check Suite
 ```bash
-# Run unit & integration tests
-npm test
-
-# Run orchestrator tool-selection eval suite
-npm run eval
-
-# Run full CI check (types, linter, tests, eval, build)
-npm run typecheck && npm run lint && npm test && npm run eval && npm run build
+npm run ci:all
+# Runs: typecheck -> lint -> test:coverage (>=85% lines on lib/) -> eval:gate -> next build
 ```
 
 ---
 
+## Environment Variables
+
+| Variable | Required | Scope | Purpose |
+| :--- | :---: | :--- | :--- |
+| `SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_URL` | Required (DB/Auth) | Server / Public URL | Supabase project URL |
+| `SUPABASE_ANON_KEY` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Required (Auth) | Server / Public Key | Supabase anonymous key for RLS client |
+| `SUPABASE_SERVICE_KEY` | Required (Webhooks) | Server-only | Service-role key for webhook/worker writes |
+| `GITHUB_APP_ID` | Required (PR Reviews) | Server-only | GitHub App numeric ID |
+| `GITHUB_APP_PRIVATE_KEY` | Required (PR Reviews) | Server-only | GitHub App PEM private key (`\n` escaped) |
+| `GITHUB_WEBHOOK_SECRET` | Required (Webhooks) | Server-only | HMAC-SHA256 webhook verification secret |
+| `GROQ_API_KEY` | Optional (LLM) | Server-only | Primary LLM synthesis (`llama-3.3-70b-versatile`) |
+| `GEMINI_API_KEY` | Optional (LLM) | Server-only | Fallback LLM synthesis (`gemini-2.0-flash`) |
+| `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | Optional (Cache/RL) | Server-only | Distributed rate limiting and 24h OSV cache |
+| `QSTASH_TOKEN` / `QSTASH_CURRENT_SIGNING_KEY` / `QSTASH_NEXT_SIGNING_KEY` | Optional (Queue) | Server-only | Durable webhook job queue and signature verification |
+| `CRON_SECRET` | Required in Prod | Server-only | Protects `/api/cron/watchdog` and `/api/cron/retention` |
+| `ADMIN_GITHUB_LOGINS` | Optional | Server-only | Comma-separated GitHub logins allowed on `/observability` |
+| `SENTRY_DSN` / `NEXT_PUBLIC_SENTRY_DSN` | Optional | Server / Client | Error tracking |
+
+---
+
+## Documentation Index
+
+- [Architecture & Sequence Diagrams](docs/ARCHITECTURE.md)
+- [Security Architecture & STRIDE Threat Model](docs/SECURITY.md)
+- [Modular OpenAPI 3.1 API Guide](docs/API.md) (Live UI at `/api/docs`)
+- [Operations Runbook](docs/RUNBOOK.md)
+- [Deployment & Rollback Guide](docs/DEPLOYMENT.md)
+- [GitHub Action (`devguard-action`) Guide](docs/ACTION.md)
+- [Claims-vs-Code Truthfulness Matrix](docs/CLAIMS.md)
+- [Final Adversarial Acceptance Review](docs/FINAL_ACCEPTANCE.md)
+
 ## License
 
-MIT License. See [LICENSE](LICENSE) for details.
+MIT — see [LICENSE](LICENSE).

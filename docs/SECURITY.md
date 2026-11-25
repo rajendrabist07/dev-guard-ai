@@ -94,3 +94,31 @@ GitHub Webhook processing (`app/api/webhooks/github/route.ts`) operates under st
    - Executed vulnerability audit: 0 critical vulnerabilities.
    - 1 High severity advisory identified in `postcss <= 8.5.22` bundled internally within Next.js 15.1.7.
    - **Risk Assessment**: `postcss` is executed strictly during build time by Next.js compiler workers; it is not exposed as a runtime HTTP service or client-reachable code. Upgrading requires Next.js 16 (major breaking change). This is documented and accepted as a non-runtime build dependency risk.
+
+
+---
+
+## 7. STRIDE Threat Model & Trust Boundaries
+
+### Trust Boundaries
+1. **Boundary A — Public Internet $\to$ Edge Middleware (`middleware.ts`):** Untrusted clients and GitHub webhooks enter here. Client-supplied identity headers (`x-user-id`, `x-account-login`, `x-github-installation-id`) are stripped before reaching route handlers.
+2. **Boundary B — Webhook / Queue Ingress $\to$ Worker Execution (`/api/webhooks/github`, `/api/jobs/review-worker`):** Protected by HMAC-SHA256 (`crypto.timingSafeEqual`) for GitHub and Ed25519/HMAC (`@upstash/qstash` `Receiver`) for queue callbacks.
+3. **Boundary C — Untrusted PR Diffs $\to$ LLM Synthesis (`lib/agent/llm.ts`):** PR titles, authors, and code diffs are untrusted attacker-controlled strings enclosed in per-request cryptographic nonces (`<<<UNTRUSTED_CONTENT_NONCE_...>>>`). Deterministic tool findings cannot be altered by LLM output.
+4. **Boundary D — Application Server $\to$ Supabase Postgres (`db/migrations/`):** Tenant reads go through user-scoped RLS clients; webhook/worker writes use `supabaseAdmin` only after cryptographic webhook/queue verification.
+
+### STRIDE Analysis Summary
+
+| Category | Threat | Mitigation & Code Reference |
+| :--- | :--- | :--- |
+| **Spoofing** | Forged user identity headers or `user_metadata` tampering | Stripped at edge (`middleware.ts`); verified via `supabase.auth.getUser()` + `user.identities` (`lib/security/auth.ts`). |
+| **Tampering** | Modified webhook payloads, queue jobs, or LLM finding suppression | Timing-safe HMAC (`lib/github/client.ts`), QStash `Receiver` (`lib/queue/qstash.ts`), Zod + referential finding-ID validation (`lib/agent/llm.ts`). |
+| **Repudiation** | Denying webhook/CI triggers or unlogged auth failures | `webhook_deliveries` table, correlation IDs, persistent redacted `system_logs` (`lib/observability/logger.ts`). |
+| **Information Disclosure** | Cross-tenant IDOR, leaked tokens in logs, unauthenticated telemetry | `requireRepoAccess` / `requireReviewRunAccess`, Postgres RLS, `scrubSecrets`, `ADMIN_GITHUB_LOGINS` allowlist on `/observability`. |
+| **Denial of Service** | Webhook flood, `/api/try` wallet drain, stuck worker runs | 5MB webhook cap, Upstash Redis sliding-window rate limit (5/10m), daily LLM budget breaker, Vercel Cron watchdog (`>300s`). |
+| **Elevation of Privilege** | PostgREST filter injection or SSRF via malicious dependencies | Parameterized `.eq()`/`.in()` only, npm package regex validation + `api.osv.dev` host allowlist (`lib/agent/tools/deps-scan.ts`). |
+
+---
+
+## 8. Responsible Disclosure
+
+If you discover a security vulnerability in DevGuard AI, please **do not** open a public GitHub issue. Report it privately via GitHub Security Advisories on `github.com/rajendrabist07/dev-guard-ai/security/advisories/new` or contact the maintainer directly. We acknowledge reports within 48 hours and target fixes for P0 issues within 72 hours.

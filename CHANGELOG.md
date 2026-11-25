@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.0] - 2026-11-25 — Production Hardening, Durable Pipeline, Real AST & Phase 9 Acceptance
+
+### Security & Authentication (Phase 2)
+- Eliminated client-supplied identity header trust (`x-user-id`, `x-account-login`, `x-github-installation-id`) in `lib/security/auth.ts` and stripped them at edge `middleware.ts`.
+- Enforced Supabase Auth GitHub OAuth session verification (`getUser()` + `user.identities`) and single authorization layer (`requireUser`, `requireRepoAccess`, `requireReviewRunAccess`).
+- Eliminated PostgREST `.or()` string interpolation; enforced Postgres RLS across tenants.
+- Hardened `/api/webhooks/github` with `crypto.timingSafeEqual`, 5MB limit, replay deduplication, and `ON CONFLICT DO NOTHING`.
+
+### Truthfulness & Telemetry (Phase 3)
+- Removed all fabricated dashboard metrics and hardcoded savings/latency values; centralized model catalog and pricing in `lib/config/models.ts` (fixed Gemini `2.0` vs `2.5` mismatch).
+- Added live `pingDatabase()` and `pingRedis()` checks, synchronized observability health states, and centralized secret redaction (`system_logs`).
+
+### Backend Robustness & Analysis Depth (Phases 4–6)
+- Replaced fire-and-forget `after()` with Upstash QStash durable queue (`/api/jobs/review-worker`, `/api/jobs/dead-letter`), state machine (`queued -> running -> completed | failed | timed_out`), and Vercel Cron watchdog/retention jobs.
+- Added exact lockfile parsing (`package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`) for OSV batch scanning.
+- Implemented TypeScript Compiler API AST Security Analyzer (`lib/agent/tools/ast-analyzer.ts`) across 9 CWE classes and companion `actions/devguard-action` with GitHub OIDC `/api/ingest`.
+- Unified LLM providers behind `ResilientLLMProvider` with circuit breakers, native tool calling (capped at 5 iterations), strict Zod `ReviewSynthesisSchema`, referential finding-ID validation, and 64-case CI eval gate (`dev` + `held-out`).
+
+### Frontend, Test Pyramid, CI/CD & Documentation (Phases 7–9)
+- Built accessible dark design system (`components/ui/*`, WCAG AA contrast, 44px touch targets, `Inter` + `JetBrains Mono`).
+- Achieved `86.01%` line coverage across `lib/` (46 suites, 272 tests), Playwright E2E + axe-core audits, k6 load testing, SHA-pinned GitHub Actions, CodeQL, and modular OpenAPI 3.1.0 docs (`/api/docs`, `/api/docs.json`).
+
+---
+
 ## [1.2.0] - 2026-08-19 — Enterprise Engineering Discipline (Sprint V1–V5)
 
 ### Added
