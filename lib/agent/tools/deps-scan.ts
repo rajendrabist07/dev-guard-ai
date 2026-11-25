@@ -38,6 +38,7 @@ interface OsvAffected {
 
 interface OsvVulnItem {
   id?: string;
+  aliases?: string[];
   summary?: string;
   details?: string;
   affected?: OsvAffected[];
@@ -86,6 +87,14 @@ const OFFLINE_KNOWN_VULNERABILITIES: Record<string, VulnerabilityResult[]> = {
     },
   ],
   'minimist:0.0.8': [
+    {
+      package: 'minimist',
+      version: '0.0.8',
+      vulnerabilityId: 'GHSA-xvch-5gv4-984h',
+      summary: 'Critical Prototype Pollution in minimist parse args (CVE-2021-44906).',
+      severity: 'critical',
+      recommendedVersion: '^1.2.8',
+    },
     {
       package: 'minimist',
       version: '0.0.8',
@@ -297,37 +306,59 @@ async function queryOsvBatch(
             curatedList.map((c) => [c.vulnerabilityId, c])
           );
 
-          const vulns: VulnerabilityResult[] = resItem.vulns.map((v) => {
-            const vulnId = v.id || 'GHSA-UNKNOWN';
-            const curated = curatedMap.get(vulnId);
+          const vulns: VulnerabilityResult[] = await Promise.all(
+            resItem.vulns.map(async (rawV, idx) => {
+              let v = rawV;
+              const vulnId = v.id || 'GHSA-UNKNOWN';
+              let curated =
+                curatedMap.get(vulnId) ||
+                (v.aliases || []).map((a) => curatedMap.get(a)).find(Boolean);
 
-            const rawSummary =
-              curated?.summary ||
-              v.summary ||
-              v.details ||
-              `Security vulnerability reported for ${dep.name}@${dep.version}`;
+              // OSV /v1/querybatch returns minimal { id, modified } stubs; hydrate up to 3 stubs per package when uncurated
+              if (!curated && !v.summary && !v.database_specific?.severity && idx < 3 && vulnId !== 'GHSA-UNKNOWN') {
+                try {
+                  const detailRes = await fetch(`https://api.osv.dev/v1/vulns/${encodeURIComponent(vulnId)}`, {
+                    signal: AbortSignal.timeout(2500),
+                  });
+                  if (detailRes.ok) {
+                    v = (await detailRes.json()) as OsvVulnItem;
+                    curated =
+                      curatedMap.get(vulnId) ||
+                      (v.aliases || []).map((a) => curatedMap.get(a)).find(Boolean);
+                  }
+                } catch {
+                  // Gracefully ignore detail hydration timeout/network failure
+                }
+              }
 
-            const isCritical =
-              curated?.severity === 'critical' ||
-              /\bcritical\b|remote code execution|\brce\b|arbitrary code execution|\bssrf\b/i.test(rawSummary) ||
-              v.database_specific?.severity?.toLowerCase() === 'critical';
+              const rawSummary =
+                curated?.summary ||
+                v.summary ||
+                v.details ||
+                `Security vulnerability reported for ${dep.name}@${dep.version}`;
 
-            const recommended =
-              curated?.recommendedVersion ||
-              extractRecommendedFix(v) ||
-              (curatedList.length > 0 ? curatedList[0].recommendedVersion : undefined);
+              const isCritical =
+                curated?.severity === 'critical' ||
+                /\bcritical\b|remote code execution|\brce\b|arbitrary code execution|\bssrf\b/i.test(rawSummary) ||
+                v.database_specific?.severity?.toLowerCase() === 'critical';
 
-            return {
-              package: dep.name,
-              version: dep.version,
-              vulnerabilityId: vulnId,
-              summary: rawSummary,
-              severity: (isCritical ? 'critical' : 'warning') as Severity,
-              recommendedVersion: recommended,
-              dependencyPath: dep.dependencyPath,
-              isPreExisting: !dep.isPrChange,
-            };
-          });
+              const recommended =
+                curated?.recommendedVersion ||
+                extractRecommendedFix(v) ||
+                (curatedList.length > 0 ? curatedList[0].recommendedVersion : undefined);
+
+              return {
+                package: dep.name,
+                version: dep.version,
+                vulnerabilityId: vulnId,
+                summary: rawSummary,
+                severity: (isCritical ? 'critical' : 'warning') as Severity,
+                recommendedVersion: recommended,
+                dependencyPath: dep.dependencyPath,
+                isPreExisting: !dep.isPrChange,
+              };
+            })
+          );
 
           // Prioritize curated vulnerabilities and critical severity
           vulns.sort((a, b) => {
