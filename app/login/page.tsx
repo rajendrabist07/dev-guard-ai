@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import GithubIcon from '@/components/icons/GithubIcon';
 import { Shield, ShieldAlert, ArrowRight, Loader2 } from 'lucide-react';
-import { createUserClient } from '@/lib/db/supabase';
+import { createBrowserClient } from '@supabase/ssr';
 
 function LoginForm() {
   const searchParams = useSearchParams();
@@ -22,7 +22,9 @@ function LoginForm() {
     setLoading(true);
     setAuthError(null);
 
-    const client = createUserClient();
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    const client = supabaseUrl && supabaseAnonKey ? createBrowserClient(supabaseUrl, supabaseAnonKey) : null;
     if (!client) {
       setAuthError('Supabase authentication client is not configured.');
       setLoading(false);
