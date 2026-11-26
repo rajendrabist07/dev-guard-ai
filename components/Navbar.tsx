@@ -100,7 +100,6 @@ export default function Navbar() {
         <Link
           href="/"
           className="flex items-center space-x-3 group min-h-[44px] py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 rounded-lg"
-          aria-label="DevGuard AI Home"
         >
           <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-600 via-teal-500 to-cyan-400 p-0.5 shadow-lg shadow-emerald-500/20 group-hover:scale-105 transition-transform">
             <div className="w-full h-full bg-[#090d16] rounded-[10px] flex items-center justify-center">
@@ -111,7 +110,7 @@ export default function Navbar() {
             <span className="font-bold text-base text-white tracking-tight flex items-center gap-1">
               DevGuard <span className="text-emerald-400 font-extrabold">AI</span>
             </span>
-            <span className="text-[10px] text-slate-400 font-mono tracking-wider uppercase">
+            <span className="text-xs text-slate-400 font-mono tracking-wider uppercase">
               Security Review Agent
             </span>
           </div>

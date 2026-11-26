@@ -9,10 +9,11 @@ test.describe('E2E — Full Keyboard Navigation & Focus Accessibility', () => {
     const activeElement = await page.evaluate(() => document.activeElement?.textContent);
     expect(activeElement?.toLowerCase()).toContain('skip to');
 
-    // Press Enter on Skip to Content
+    // Press Enter on Skip to Content -> navigates to #main-content
     await page.keyboard.press('Enter');
-    const focusedTag = await page.evaluate(() => document.activeElement?.tagName.toLowerCase());
-    expect(focusedTag === 'main' || focusedTag === 'div' || focusedTag === 'a').toBe(true);
+    await expect(page).toHaveURL(/#main-content$/);
+    await expect(page.locator('#main-content')).toBeAttached();
+    await expect(page.locator('#main-content h1')).toBeVisible();
   });
 
   test('interactive controls maintain visible focus rings and tab order', async ({ page }) => {
@@ -34,9 +35,7 @@ test.describe('E2E — Full Keyboard Navigation & Focus Accessibility', () => {
 
   test('escape key dismisses modal dialogs or toasts', async ({ page }) => {
     await page.goto('/');
-    // Trigger escape
     await page.keyboard.press('Escape');
-    // Page state remains intact without errors
     await expect(page).toHaveTitle(/DevGuard AI/i);
   });
 });

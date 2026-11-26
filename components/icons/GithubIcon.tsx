@@ -3,7 +3,7 @@ import React from 'react';
 export function GithubIcon({ className = 'w-4 h-4', ...props }: React.SVGProps<SVGSVGElement>) {
   return (
     <svg
-      role="img"
+      aria-hidden="true"
       viewBox="0 0 24 24"
       fill="currentColor"
       className={className}

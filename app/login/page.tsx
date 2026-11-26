@@ -87,7 +87,7 @@ function LoginForm() {
           )}
         </button>
 
-        <p className="text-[11px] text-gray-500 text-center">
+        <p className="text-xs text-slate-400 text-center">
           Identity is validated directly against GitHub OAuth. No passwords or editable profiles are stored.
         </p>
       </div>
@@ -99,7 +99,7 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex flex-col bg-[#0b0f19] text-gray-100 selection:bg-emerald-500/30 selection:text-emerald-300">
       <Navbar />
-      <main className="flex-1 flex items-center justify-center px-4 sm:px-6 py-12">
+      <main id="main-content" tabIndex={-1} className="flex-1 flex items-center justify-center px-4 sm:px-6 py-12 outline-none">
         <Suspense
           fallback={
             <div className="text-center text-gray-400 text-sm">

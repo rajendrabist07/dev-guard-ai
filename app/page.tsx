@@ -219,7 +219,7 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900/40">
+          <div tabIndex={0} aria-label="Supported checks and limitations table" className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900/40">
             <table className="w-full text-left text-sm">
               <thead className="bg-slate-800/60 text-slate-200 border-b border-slate-800 font-semibold">
                 <tr>

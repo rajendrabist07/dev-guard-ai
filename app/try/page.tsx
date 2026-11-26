@@ -503,7 +503,7 @@ export default function TryPage() {
                     <span className="text-xs font-mono px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-300">
                       {fixture.badge}
                     </span>
-                    <span className="text-[11px] text-gray-500 font-mono">
+                    <span className="text-xs text-slate-400 font-mono">
                       {fixture.fileNames.join(', ')}
                     </span>
                   </div>
@@ -550,7 +550,7 @@ export default function TryPage() {
                 </button>
               </div>
 
-              <div className="p-4 bg-black/60 font-mono text-xs overflow-x-auto max-h-64">
+              <div className="p-4 bg-black/60 font-mono text-xs overflow-x-auto max-h-64" tabIndex={0}>
                 <pre className="text-emerald-300 leading-relaxed">{selectedSample.diff}</pre>
               </div>
             </div>
@@ -891,7 +891,7 @@ export default function TryPage() {
                               {f.file_path}:{f.line}
                             </span>
                           </div>
-                          <span className="text-[11px] text-gray-500 font-mono">
+                          <span className="text-xs text-slate-400 font-mono">
                             Tool: <span className="text-gray-300">{f.tool_source || 'orchestrator'}</span>
                           </span>
                         </div>
@@ -944,21 +944,21 @@ export default function TryPage() {
                           <Terminal className="w-4 h-4 text-emerald-400" />
                           <span>Step {step.step}: Invoked Tool [{step.tool}]</span>
                         </span>
-                        <span className="text-[10px] text-gray-500">
+                        <span className="text-xs text-slate-400">
                           {new Date(step.timestamp).toLocaleTimeString()}
                         </span>
                       </div>
 
                       <div>
                         <span className="text-gray-400 font-semibold block mb-1">Tool Input:</span>
-                        <pre className="p-2.5 rounded-lg bg-black/70 text-gray-300 overflow-x-auto border border-gray-800">
+                        <pre tabIndex={0} className="p-2.5 rounded-lg bg-black/70 text-gray-300 overflow-x-auto border border-gray-800">
                           {JSON.stringify(step.input, null, 2)}
                         </pre>
                       </div>
 
                       <div>
                         <span className="text-emerald-400 font-semibold block mb-1">Tool Execution Output:</span>
-                        <pre className="p-2.5 rounded-lg bg-black/70 text-emerald-200 overflow-x-auto border border-emerald-950">
+                        <pre tabIndex={0} className="p-2.5 rounded-lg bg-black/70 text-emerald-200 overflow-x-auto border border-emerald-950">
                           {JSON.stringify(step.output, null, 2)}
                         </pre>
                       </div>
@@ -992,7 +992,7 @@ export default function TryPage() {
               <div className="p-8 text-center space-y-3">
                 <History className="w-8 h-8 text-gray-600 mx-auto" />
                 <div className="text-sm font-semibold text-gray-300">No test runs recorded in this session yet</div>
-                <p className="text-xs text-gray-500 max-w-md mx-auto">
+                <p className="text-xs text-slate-400 max-w-md mx-auto">
                   Run a sample file or paste custom code above. Your test runs and shareable links will be saved here automatically!
                 </p>
               </div>
@@ -1016,7 +1016,7 @@ export default function TryPage() {
                       <h3 className="text-sm font-bold text-white hover:text-emerald-300 transition-colors">
                         <Link href={`/try/result/${run.id}`}>{run.pr_title}</Link>
                       </h3>
-                      <div className="flex items-center gap-2 text-xs text-gray-500 font-mono">
+                      <div className="flex items-center gap-2 text-xs text-slate-400 font-mono">
                         <Clock className="w-3.5 h-3.5 text-gray-600" />
                         <span>{new Date(run.created_at).toLocaleString()}</span>
                         <span>•</span>
@@ -1058,7 +1058,7 @@ export default function TryPage() {
       </main>
 
       {/* Footer */}
-      <footer className="mt-auto border-t border-gray-800/80 py-6 text-center text-xs text-gray-500 font-mono">
+      <footer className="mt-auto border-t border-gray-800/80 py-6 text-center text-xs text-slate-400 font-mono">
         DevGuard AI • Autonomous PR Review & Security Agent • Built with Next.js 15, Groq, Gemini & Supabase
       </footer>
     </div>
